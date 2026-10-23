@@ -1,6 +1,8 @@
 ---
 asset_id: EA-20261022-09
 ai_form: Memory
+provenance_status: synthetic
+provenance_note: 由构造的 HBM3E DFT 会议纪要生成，仅用于验证资产化流程，不代表真实项目结论
 title: HBM3E 修复层级决策：选 stack-level
 layer: 领域级
 project: HBM

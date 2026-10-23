@@ -2,6 +2,12 @@
 
 端到端 AI Native 工作流。一个流程一个子目录，描述多个技能/组件如何协作、在哪些点需要人批准、阶段之间交接什么。
 
+## 当前收录
+
+| 流程 | 作用 | 组成 |
+|---|---|---|
+| [`self-evolution`](self-evolution/README.md) | 从 session 日志蒸馏资产，人工确认后晋升 | `session-distiller` + `hooks/self-evolve` + staging/游标 |
+
 ## 建议结构
 
 ```

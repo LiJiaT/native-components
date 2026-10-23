@@ -16,6 +16,8 @@
 
 ## 落位规则
 
+- 公共级 Memory → `memory/` 根目录
+- 公共级 Rule → `rules/` 根目录
 - 领域级 Memory → `memory/<slug>/`
 - 领域级 Rule → `rules/<slug>/`
 - 领域级 Skill / Workflow / Prompt 仍按类型目录存放，用 frontmatter 的 `domains` 标注领域，不强制建领域子目录。

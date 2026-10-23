@@ -8,8 +8,8 @@ AI Native 工程流程的可复用基础组件库。组件按类型分目录存�
 |---|---|---|
 | [`skills/`](skills/README.md) | Agent Skill（Claude Code 等） | `assetize`（技能 A）、`asset-ai-ize`（技能 B）、`ai-infra-feedback`（反馈技能） |
 | [`flows/`](flows/README.md) | 多组件编排的端到端流程：阶段、卡点、交接契约 | 待补充 |
-| [`memory/`](memory/README.md) | 可复用的 memory 条目模板与公共记忆 | 待补充 |
-| [`rules/`](rules/README.md) | 可复用的工程规则（Rule） | 待补充 |
+| [`memory/`](memory/README.md) | 可复用的 memory 条目模板与公共记忆 | `dft/hbm3e-stack-level-repair-decision.md` |
+| [`rules/`](rules/README.md) | 可复用的工程规则（Rule） | `dft/bist-scan-same-cycle-exclusion.md` |
 | [`prompts/`](prompts/README.md) | 可复用的提示词模板（Prompt） | 待补充 |
 | [`hooks/`](hooks/README.md) | 确定性钩子脚本与配置示例（Hook） | 待补充 |
 | [`agents/`](agents/README.md) | 子代理定义（Agent） | 待补充 |

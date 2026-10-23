@@ -15,3 +15,11 @@
 - 一条记忆只表达一个结论；写明适用前提与失效条件。
 - 不粘贴原始记录、会议全文、日志；只保留提炼后的结论。
 - 定期复核：前提变化即更新或删除，避免过期记忆继续被加载。
+
+## 领域子目录
+
+领域级条目按 [`docs/domain-taxonomy.md`](../docs/domain-taxonomy.md) 的 slug 放在对应子目录：
+
+`architecture/`、`design/`、`verification/`、`timing/`、`dft/`、`post-sim/`、`firmware/`、`analog/`、`backend/`
+
+项目私有条目仍放对应项目的 memory 目录，不进这里。

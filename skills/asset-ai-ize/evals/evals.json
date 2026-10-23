@@ -1,0 +1,60 @@
+{
+  "skill_name": "asset-ai-ize",
+  "contract": "技能B只消费 status=approved 的 asset record；不重新分类、不改 statement/evidence/mapping；映射不可行返回 mapping_issue；不 push/merge",
+  "evals": [
+    {
+      "id": 1,
+      "name": "Rule 实现（approved record → rule 全文）",
+      "prompt": "把 approved record EA-<demo>-01（ai_form=Rule）实现为可直接落地的 rules markdown：生成 build 包（implementation.md / build-manifest.json / artifacts / tests / review.md / install.md），并通过 validate_build.py",
+      "expected_output": "rule 全文 artifact 带 asset_id frontmatter；tests 含命中/不命中样例；语义保持对照齐全；validate_build exit 0；record 一字未改",
+      "assertions": [
+        {"text": "build 六件套齐全（implementation.md/manifest/artifacts/tests/review.md/install.md）", "type": "file_check"},
+        {"text": "artifacts 为祈使句规则全文，frontmatter 含 asset_id", "type": "content_check"},
+        {"text": "tests/ 含应命中与不应命中的触发样例", "type": "content_check"},
+        {"text": "implementation.md 含语义保持对照表（statement 结论 → 承载位置）", "type": "content_check"},
+        {"text": "validate_build.py exit 0", "type": "script"},
+        {"text": "record 的 statement/evidence/mapping 未被修改", "type": "content_check"}
+      ],
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "Memory 实现（独立成立性）",
+      "prompt": "把 approved record EA-<demo>-02（ai_form=Memory，决策记忆）实现为 memory 条目：保留背景/选项/取舍/证据/日期，附 provenance 注释",
+      "expected_output": "条目脱离 record 仍可独立理解；test 记录独立成立性检查；validate_build exit 0",
+      "assertions": [
+        {"text": "memory 条目含决策五要素且可独立成立", "type": "content_check"},
+        {"text": "条目结尾带 provenance（来源 asset_id + 入库日期）", "type": "content_check"},
+        {"text": "tests/ 记录独立成立性检查结果", "type": "content_check"},
+        {"text": "validate_build.py exit 0", "type": "script"}
+      ],
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "mapping_issue 分支（形态落不了地）",
+      "prompt": "尝试把一条 ai_form=Hook 但 statement 只是背景知识的 approved record 做成实现；发现形态与内容矛盾后返回 mapping_issue",
+      "expected_output": "type=mapping_issue 的 build 包，mapping-issue.md 含不可行原因/影响/建议动作；validate_build exit 0；不硬造实现",
+      "assertions": [
+        {"text": "build-manifest.json type=mapping_issue", "type": "file_check"},
+        {"text": "mapping-issue.md 含不可行原因/影响/建议动作三要素", "type": "content_check"},
+        {"text": "未生成硬造的实现 artifact", "type": "file_check"},
+        {"text": "validate_build.py exit 0", "type": "script"}
+      ],
+      "files": []
+    },
+    {
+      "id": 4,
+      "name": "负例闸门（篡改映射/未批准/敏感信息）",
+      "prompt": "构造三类非法 build 包：manifest ai_form 与 record 不一致、消费 status=proposed 的 record、artifact 含疑似令牌",
+      "expected_output": "三类均被 validate_build.py 拒绝（exit 1）",
+      "assertions": [
+        {"text": "ai_form 不一致 → exit 1", "type": "script"},
+        {"text": "record 未 approved → exit 1", "type": "script"},
+        {"text": "artifact 含令牌模式 → exit 1", "type": "script"},
+        {"text": "缺 tests/ 或 review.md → exit 1", "type": "script"}
+      ],
+      "files": []
+    }
+  ]
+}

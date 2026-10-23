@@ -15,6 +15,7 @@ Agent Skill 目录。一个技能一个子目录，目录名即技能名（kebab
 |---|---|
 | [`assetize`](assetize/SKILL.md) | 技能 A：原始材料 → 资产提案包 + 入库申请 |
 | [`asset-ai-ize`](asset-ai-ize/SKILL.md) | 技能 B：approved asset record → AI 组件实现包 |
+| [`ai-infra-feedback`](ai-infra-feedback/SKILL.md) | 组件问题 → 结构化反馈单（默认只落盘，不自动发送） |
 
 ## 安装
 

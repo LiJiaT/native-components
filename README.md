@@ -6,7 +6,7 @@ AI Native 工程流程的可复用基础组件库。组件按类型分目录存�
 
 | 目录 | 放什么 | 当前内容 |
 |---|---|---|
-| [`skills/`](skills/README.md) | Agent Skill（Claude Code 等） | `assetize`（技能 A）、`asset-ai-ize`（技能 B） |
+| [`skills/`](skills/README.md) | Agent Skill（Claude Code 等） | `assetize`（技能 A）、`asset-ai-ize`（技能 B）、`ai-infra-feedback`（反馈技能） |
 | [`flows/`](flows/README.md) | 多组件编排的端到端流程：阶段、卡点、交接契约 | 待补充 |
 | [`memory/`](memory/README.md) | 可复用的 memory 条目模板与公共记忆 | 待补充 |
 | [`rules/`](rules/README.md) | 可复用的工程规则（Rule） | 待补充 |
@@ -15,7 +15,9 @@ AI Native 工程流程的可复用基础组件库。组件按类型分目录存�
 | [`agents/`](agents/README.md) | 子代理定义（Agent） | 待补充 |
 | [`docs/`](docs/README.md) | 使用指南、设计说明、规范链接 | 待补充 |
 
-## 当前组件：资产化 A/B 双技能
+## 当前组件
+
+### 资产化 A/B 双技能
 
 两个阶段以 **approved asset record** 为唯一交接契约：
 
@@ -29,6 +31,10 @@ AI Native 工程流程的可复用基础组件库。组件按类型分目录存�
 - **确定性闸门**：`validate.py`（A）、`validate_build.py`（B），退出码即结论。
 - **相关仓库**：[eng-knowledge-assets](https://github.com/LiJiaT/eng-knowledge-assets)（approved asset records）、[eng-asset-ai-components](https://github.com/LiJiaT/eng-asset-ai-components)（实现物）。
 
+### 反馈技能 ai-infra-feedback
+
+把使用中遇到的组件问题整理成结构化反馈单，默认只落盘、不发送。输入为问题描述或当次 session；输出 Markdown + JSON 反馈单与 self-evolve staging 候选。安装、使用与验收见 [`skills/ai-infra-feedback/README.md`](skills/ai-infra-feedback/README.md)。
+
 ## 安装
 
 Claude Code 用户级安装：
@@ -36,6 +42,7 @@ Claude Code 用户级安装：
 ```bash
 cp -r skills/assetize ~/.claude/skills/
 cp -r skills/asset-ai-ize ~/.claude/skills/
+cp -r skills/ai-infra-feedback ~/.claude/skills/
 ```
 
 安装前先检查目标环境是否已有同名 skill；更新时覆盖对应目录，并保留旧版本以便回滚。
@@ -45,6 +52,7 @@ cp -r skills/asset-ai-ize ~/.claude/skills/
 ```text
 资产化 <材料>                  # 技能 A：产出 proposal package
 把 EA-YYYYMMDD-NN 实现成 ...    # 技能 B：产出 implementation package
+提反馈：<问题描述>              # 反馈技能：产出结构化反馈单
 ```
 
 两个技能都只生成「申请 + 校验材料」；push / merge / 安装由人执行，符合“外发由人执行”规则。

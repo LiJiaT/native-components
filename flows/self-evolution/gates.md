@@ -6,14 +6,19 @@
 
 | 卡点 | 位置 | 检查内容 | 失败处理 |
 |---|---|---|---|
-| 入队预过滤 | `distill-enqueue.sh` | 事件字段可解析、transcript 存在、`tool_use` ≥10 | 不入队，静默退出 |
-| 队列去重 | `worker.sh` | `mkdir` 原子锁，已有 worker 时退出 | 不重复启动 worker |
-| 每日预算 | `worker.sh` | `MAX_JOBS_PER_DAY`（默认 3） | 任务保留在队列，次日继续 |
-| 候选格式 | 候选落盘前 | frontmatter 必填字段、staging 路径限制 | 不写候选，保留任务 |
-| 脱敏 | 候选落盘前 / 晋升前 | token、密码、内网地址等替换为 `<REDACTED>` | 阻断晋升，人工复核 |
-| 原始记录检查 | 晋升前 | 长期记忆不得包含逐字稿、聊天记录、调试日志原文（R8） | 退回改写为“结论 + 出处” |
-| provenance | 晋升前 | 每条资产带 `<!-- 来源: session <id>, <日期>, 理由: ... -->` | 补齐后写入 |
-| 写入范围 | 晋升前 | 只写批准的目标路径；不直接改 `settings.json` | 拒绝写入，交人处理 |
+| 入队预过滤 | `hooks/self-evolve/enqueue.py` | JSON 逐行解析、路径原样保留、`tools≥40 OR edits≥3 OR corrections≥2`、排除 meta-session | 不入队，写 `queue/enqueue.log` |
+| 队列锁 | `worker.py` | 目录锁含 PID/host/时间；PID 不存在或超时（默认 2h）可恢复陈旧锁 | 活锁时退出；陈旧锁留日志后恢复 |
+| 队列一致性 | `worker.py` | producer/consumer 共用 `.queue.lock`；append-only + 锁内压缩；处理期间新任务不丢 | 保留任务并记录失败 |
+| 每日预算 | `worker.py` | `MAX_JOBS_PER_DAY`（默认 3）；超限任务标 held 并写 `queue/HOLD` | 任务保留；SessionStart 或调度器唤醒 |
+| 模型失败 | `worker.py` | 必须 `returncode=0` 且输出合法 JSON 数组；超时/非零/空输出保留任务 | 记录 stderr；连续 3 次进 `dead-letter.jsonl` |
+| dry-run | `worker.py` | 不调模型、不改队列、不写 staging、不消耗预算 | — |
+| 游标/幂等 | `worker.py` | `distill-state/<sid>.json` 绑定 size/mtime/sha256；未变化不重复蒸馏 | 已完成后跳过 |
+| 候选格式 | 候选落盘前 | lane 枚举、title/content/reason 非空、content 长度、frontmatter 序列化 | 不写候选；无有效候选时任务失败保留 |
+| 脱敏 | 候选落盘前 | key/token/密码/私钥模式命中即拒绝该候选 | 不写候选并记日志 |
+| 原始记录检查 | 候选落盘前 | 时间戳+级别、Speaker/说话人特征 ≥2 行即拒绝 | 不写候选 |
+| 去重 | 候选落盘前 | 内容 hash 决定 candidate id；重复时累加 recurrence/source_sessions | 不生成重复文件 |
+| provenance | 候选落盘 | frontmatter 含 source_sessions/recurrence/quality/content_hash | 缺项不落盘 |
+| 写入范围 | 晋升前 | 只写批准的目标路径；不直接改 `settings.json`；资产库必须 git 化 | 拒绝写入，交人处理 |
 
 ## 人工卡点
 
@@ -26,13 +31,16 @@
 
 ## 质量门
 
-一条候选进入正式资产库前，至少满足：
+一条候选进入正式资产库前，以下条件必须**同时满足**（AND，不得用 OR 降级）：
 
-1. 跨 session 复现，或来源明确且经过验证；
-2. 能命名失败模式或说明为什么值得沉淀；
-3. 有明确 owner、适用边界与失效条件；
-4. 与现有资产做过语义去重（新增 / 合并 / supersedes 有结论）；
-5. 内容已脱敏，且不是原始记录的搬运。
+1. **跨 session 复现**：`recurrence >= 2`，且 `source_sessions` 至少两个不同会话；
+2. **经验证成功**：有可复跑的测试/运行证据（命令、exit code、输出位置），不能只有自报结论；
+3. **命名失败模式**：写清"不这样做会出什么错"，而不是只描述做法；
+4. 有明确 owner、适用边界与失效条件；
+5. 与现有资产做过语义去重（新增 / 合并 / supersedes 有结论）；
+6. 内容已脱敏，且不是原始记录的搬运。
+
+资产库 **必须 git 化**；没有 git 时晋升 blocked，不得跳过 commit 与回滚路径。
 
 ## 回滚
 

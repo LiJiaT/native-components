@@ -11,9 +11,9 @@
 | `form` | ✅ | `知识库` \| `工程规则` \| `决策记忆` \| `技能工作流` | 形态主标签，五问判出 |
 | `secondary_tags` | ✅ | 上述枚举的列表 | 副标签，0..n；承载资产的多重性质 |
 | `domains` | ✅ | 9 领域的列表 | 多选 ≤3；**空列表仅当 `layer=公共级`**（治理/AI 协作类资产跨领域，不硬挂专业领域，由审批人裁决是否扩展枚举） |
-| `project` | ✅ | `LPDDR6` \| `HBM` \| `无` | `无` = 跨项目 |
+| `projects` | ✅（可为空列表） | `LPDDR6` / `HBM` 的列表 | 空列表 = 跨项目；同一资产可同时属于多个项目（兼容旧字段 `project` 单值） |
 | `layer` | ✅ | `个人级` \| `项目级` \| `领域级` \| `公共级` | 共享范围 |
-| `ai_form` | ✅ | `Memory` \| `Rule` \| `Skill` \| `Workflow` \| `Hook` \| `Prompt` | **建议 AI 形态**（给技能 B 的映射建议，非实现承诺）；默认按五问映射，可按实际组件调整 |
+| `ai_form` | ✅（可为 null） | `Memory` \| `Rule` \| `Skill` \| `Workflow` \| `Hook` \| `Prompt` \| `null` | **建议 AI 形态**；暂不 AI 化时置 null，并写 `mapping_status: unmapped|deferred` + 非空 `mapping_reason` |
 | `source` | ✅ | 字符串 | 输入材料名 + 日期，如 `HBM DFT debug 纪要 2026-10-22` |
 | `suggested_owner` | ✅ | 字符串 | 按层级推导，见 §3 |
 
@@ -46,8 +46,8 @@
 | 领域级 | 某专业领域内跨项目通用（DV 方法学、DFT 实践、时序方法） | 对应领域 owner |
 | 公共级 | 全团队任何领域都适用（AI 协作规范、公共流程） | AI 平台团队 |
 
-- `project` 与 `layer` 一致性：`layer=项目级` 时 `project` 必须是 LPDDR6 或 HBM；`project=无` 时 `layer` 不得为项目级。validate.py 会校验。
-- 领域级资产的 `project` 通常为 `无`，除非它源于某项目但对领域有普适价值（此时 `project` 标来源项目，`layer` 仍为领域级——来源不等于归属）。
+- `projects` 与 `layer` 一致性：`layer=项目级` 时 `projects` 必须恰好一个具体项目；空列表时 `layer` 不得为项目级；多项目资产只能标领域级或公共级。validate.py 会校验。
+- 领域级资产的 `projects` 通常为空，除非它源于某项目但对领域有普适价值（此时 `projects` 标来源项目，`layer` 仍为领域级——来源不等于归属，不限制消费范围）。
 
 ## 4. 入库升级：approved asset record
 
@@ -60,7 +60,7 @@ owner 批准入库后，提案资产升级为 approved asset record（技能 B �
   - `synthetic`：由构造材料生成，仅用于验证流程，不代表真实事实。
   - 缺省不得视为 `verified`；`registry.json` 同步写入同一字段。
 - 正文（`## 内容` / `## 出处与理由`）**原样迁移，不得改写**——改写需走新一轮提案。
-- 写入资产 repo 本地 clone `D:\Project\eng-knowledge-assets\assets\<proposal_id>\`，同步更新 `INDEX.md` 与 `registry.json`，评审结论存 `reviews/`。
+- 写入资产 repo 本地 clone `$ENG_ASSETS_REPO/assets/<proposal_id>/`，同步更新 `INDEX.md`、`registry.json` 与 `approvals/<asset_id>.json`，评审结论存 `reviews/`。
 - record 的 `implementation` 字段此时为空，由技能 B 实现通过后回写。
 
 record 的消费契约（statement / evidence / mapping 不得被 B 修改）详见技能 B 的 `references/record-contract.md`。

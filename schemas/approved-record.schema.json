@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-native-basic-component/schemas/approved-record.schema.json",
+  "title": "approved asset record",
+  "type": "object",
+  "required": [
+    "asset_id", "proposal_id", "title", "form", "secondary_tags", "domains",
+    "layer", "ai_form", "source", "owner", "status", "approved_by",
+    "approved_date", "provenance_status", "provenance_note"
+  ],
+  "properties": {
+    "asset_id": {"type": "string", "pattern": "^EA-[0-9]{8}-[0-9]{2,}$"},
+    "proposal_id": {"type": "string", "minLength": 4},
+    "title": {"type": "string", "minLength": 4},
+    "form": {"enum": ["知识库", "工程规则", "决策记忆", "技能工作流"]},
+    "secondary_tags": {"type": "array", "items": {"enum": ["知识库", "工程规则", "决策记忆", "技能工作流"]}},
+    "domains": {"type": "array", "maxItems": 3, "items": {"enum": ["架构", "设计", "验证", "时序", "DFT", "后仿", "Firmware", "模拟", "后端"]}},
+    "project": {"oneOf": [{"enum": ["LPDDR6", "HBM", "无"]}, {"type": "array", "items": {"enum": ["LPDDR6", "HBM"]}}]},
+    "projects": {"type": "array", "items": {"enum": ["LPDDR6", "HBM"]}},
+    "layer": {"enum": ["个人级", "项目级", "领域级", "公共级"]},
+    "ai_form": {"enum": ["Memory", "Rule", "Skill", "Workflow", "Hook", "Prompt"]},
+    "mapping_status": {"enum": ["mapped", "unmapped", "deferred"]},
+    "mapping_reason": {"type": "string"},
+    "source": {"type": "string", "minLength": 4},
+    "owner": {"type": "string", "minLength": 2},
+    "status": {"enum": ["approved", "deprecated", "superseded", "withdrawn"]},
+    "approved_by": {"type": "string", "minLength": 2},
+    "approved_date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+    "provenance_status": {"enum": ["verified", "source-excerpt", "synthetic"]},
+    "provenance_note": {"type": "string", "minLength": 8},
+    "release_channel": {"enum": ["component-library", "personal", "test-only"]},
+    "implementation": {
+      "type": "object",
+      "properties": {
+        "ai_infra_repo": {"type": "string"},
+        "package": {"type": "string"},
+        "installed": {"type": ["string", "null"]},
+        "installed_by": {"type": ["string", "null"]},
+        "status": {"enum": ["pending", "implemented", "installed", "withdrawn", "superseded"]},
+        "notes": {"type": "string"}
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

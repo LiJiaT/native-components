@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Shell|shell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$HOME/.claude/gates/gate.py\" external-write",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-native-basic-component/schemas/install-manifest.schema.json",
+  "title": "install manifest",
+  "type": "object",
+  "required": ["schema_version", "installed_at", "target_root", "components", "backup_root", "source_commit"],
+  "properties": {
+    "schema_version": {"const": "1"},
+    "installed_at": {"type": "string"},
+    "target_root": {"type": "string"},
+    "backup_root": {"type": "string"},
+    "source_commit": {"type": "string"},
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "version", "type", "source", "targets", "hashes"],
+        "properties": {
+          "name": {"type": "string"},
+          "version": {"type": "string"},
+          "type": {"type": "string"},
+          "source": {"type": "string"},
+          "targets": {"type": "array", "items": {"type": "string"}},
+          "hashes": {"type": "object"}
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": false
+}

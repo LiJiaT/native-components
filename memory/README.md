@@ -8,6 +8,8 @@
 |---|---|---|
 | [`asset-taxonomy.md`](asset-taxonomy.md) | 公共级 | 资产分类体系：9 领域平铺 + 2 固定项目 + 四维正交 |
 
+领域子目录只放真实资产。synthetic 示例（EA-07/09 等）在 [`samples/synthetic/`](../samples/synthetic/)；它们不随安装器安装，也不得写入生产 memory。
+
 ## 适用
 
 - 跨项目稳定成立的事实、约定、环境基线。

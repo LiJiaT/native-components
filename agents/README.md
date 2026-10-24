@@ -18,13 +18,10 @@
 ## 安装
 
 ```bash
-mkdir -p ~/.claude/agents ~/.claude/skills
-cp agents/orchestrator.md ~/.claude/agents/
-cp -r skills/orchestrator ~/.claude/skills/
-cp -r skills/grill-me-with-doc ~/.claude/skills/
+python -X utf8 tools/install.py --component orchestrator-agent   --component orchestrator --component grill-me-with-doc   --component orchestrator-hooks --component gate-core --component component-schemas
 ```
 
-`orchestrator.md` 引用的 `references/` 与 `scripts/task_packager.py` 在 `skills/orchestrator/` 下，两者要一起安装。自动激活还需要 `hooks/orchestrator`。
+`orchestrator.md` 引用的 `references/`、`scripts/task_packager.py` 在 `skills/orchestrator/` 下，安装器会一起复制。自动激活还需要 `hooks/orchestrator`；计划/验收/外发门禁需要 `gates/gate.py` 与 schemas。不要只复制 `agents/orchestrator.md` 单文件。
 
 ## 入口提示
 

@@ -4,7 +4,7 @@ description: 不把原始记录（会议原文、聊天记录、调试日志、�
 asset_id: EA-20261022-06
 ai_form: Rule
 provenance_status: source-excerpt
-provenance_note: 摘自《AI 公共规范（v0.5 草案）》3.4 强制规则清单，未逐条对照规范全文核验
+provenance_note: 摘自《AI 公共规范（v0.7 草案）》revision 5267 的强制规则清单，未逐条对照规范全文核验
 ---
 
 # 原始记录不得写入长期记忆

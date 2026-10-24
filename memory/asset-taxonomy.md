@@ -2,7 +2,7 @@
 asset_id: EA-20261022-01
 ai_form: Memory
 provenance_status: source-excerpt
-provenance_note: 摘自《AI 公共规范（v0.5 草案）》1.2 节，未逐条对照规范全文核验
+provenance_note: 摘自《AI 公共规范（v0.7 草案）》revision 5267 的 1.2 节，未逐条对照规范全文核验
 title: 资产分类体系：9 领域平铺 + 2 固定项目 + 四维正交
 layer: 公共级
 project: 无

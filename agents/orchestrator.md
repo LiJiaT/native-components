@@ -88,6 +88,14 @@ model: inherit
 
 **Plan Change**：执行中需求变化时 → ①列出变更项 ②重新确认受影响任务的验收标准 ③记录用户批准（变更内容/时间/重新确认的验收标准）。未经确认不启动新方案。
 
+**机器可读计划（P0）**：把计划写成对象（字段见 `~/.../gates/schemas/plan.schema.json`：goal/constraints/inputs/outputs/boundaries/acceptance/human_gates/version），运行：
+
+```bash
+python ~/.claude/gates/gate.py plan --file plan.json
+```
+
+用户确认后，把确认人/时间与当前计划内容的 `scope_hash` 写入 `approval`，再运行 `gate.py plan --file plan.json --require-approval`。计划内容任何变化都会使旧 `scope_hash` 失效，必须重新确认；不得沿用旧批准。
+
 规划后**先呈计划给用户确认再执行**。
 
 ---
@@ -112,10 +120,10 @@ model: inherit
 ### 分发前强制校验
 
 ```bash
-python ~/.claude/skills/orchestrator/scripts/task_packager.py validate <task.json> --strict
+python ~/.claude/skills/orchestrator/scripts/task_packager.py validate <task.json> --strict --tasks-dir <同批任务目录>
 ```
 
-不通过则修正任务包，不得带病分发。§6.5 五类字段（输入/依赖/产出契约/验收清单/失败处理）缺一即不通过；`check_method=auto` 的验收项必须有 `check_script`。
+不通过则修正任务包，不得带病分发。strict 会校验：五类字段、类型/枚举、验收项 id 唯一与 expected/evidence_path、`auto` 的 check_script argv、依赖自依赖/断链/环、`sub-agent` 模型路由、确定性任务禁用模型、`self` 的独立 verifier（不得 same-run）。
 
 ### 分发执行
 
@@ -134,6 +142,14 @@ python ~/.claude/skills/orchestrator/scripts/task_packager.py validate <task.jso
 - `manual`：人工确认，记录确认人/时间。
 
 **模型只写「原因/影响」，不得改写脚本的通过/不通过。** 4.0 结果齐全才允许写 4.2 报告。
+
+**验收聚合（P0）**：把逐项结果写成 `acceptance.json`（字段见 `gates/schemas/acceptance.schema.json`），运行：
+
+```bash
+python ~/.claude/gates/gate.py acceptance --file acceptance.json --base-dir <交付根>
+```
+
+工具会重算 verdict、检查 evidence_path 是否存在、reviewer 是否独立于 executor；缺证据或非独立复核直接失败。通过后才写 4.2。
 
 ### 4.1 自我批判
 
@@ -157,6 +173,10 @@ python ~/.claude/skills/orchestrator/scripts/task_packager.py validate <task.jso
 - 需求理解偏差 → 回 Step 1
 - 方案设计问题 → 回 Step 2
 - 执行质量问题 → **回退给执行方重做或重新分解**（§6.6 只允许这两个路径，不得自行"修一下"）
+
+### 4.4 对外动作
+
+任何 push / PR / 发布 / 外发前，确认 `gates/gate.py external-write` 已挂为 PreToolUse；它默认拒绝，需人工 `gate.py approve --command ... --by <人>` 预批准。不得关闭或绕过拦截（R3）。
 
 ---
 

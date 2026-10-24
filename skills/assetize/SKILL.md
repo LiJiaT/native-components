@@ -31,7 +31,7 @@ description: 工程知识资产化（技能A）：把文档、会议纪要、deb
     └── assets/A<n>-<slug>.md       # 资产本体（提案阶段用局部 id A<n>）
 ```
 
-入库批准后，资产升级为 approved asset record 写入资产 repo 本地 clone（`D:\Project\eng-knowledge-assets`）的 `assets/<proposal_id>/`，同时更新该 repo 的 `INDEX.md` 与 `registry.json`；push 由人执行（R3）。
+入库批准后，资产升级为 approved asset record 写入资产 repo 本地 clone（路径由 `ENG_ASSETS_REPO` 或用户显式指定；不要硬编码作者机器路径）的 `assets/<proposal_id>/`，同时更新该 repo 的 `INDEX.md`、`registry.json` 与 `approvals/`；push 由人执行（R3）。
 
 ## 流程
 
@@ -67,9 +67,9 @@ description: 工程知识资产化（技能A）：把文档、会议纪要、deb
 | 维度 | 取值 | 判定要点 |
 |---|---|---|
 | `domains` | 架构/设计/验证/时序/DFT/后仿/Firmware/模拟/后端（多选≤3） | 资产**关于什么**专业 |
-| `project` | LPDDR6 / HBM / 无 | 只对单项目有效→标项目；跨项目→无。`无` 时层级不得为项目级 |
+| `projects` | LPDDR6 / HBM 的列表（可为空） | 同一资产可同时属于多个项目；空列表=跨项目。项目级必须且只能有一个项目 |
 | `layer` | 个人级/项目级/领域级/公共级 | 共享范围：只对自己有用=个人；单项目=项目；跨项目领域通用=领域；全团队=公共 |
-| `ai_form` | Memory/Rule/Skill/Workflow/Hook/Prompt | 第 3 步默认 + 按需调整（这是给技能 B 的**映射建议**，不是实现） |
+| `ai_form` | Memory/Rule/Skill/Workflow/Hook/Prompt 或 null | 第 3 步默认 + 按需调整（给技能 B 的映射建议）。暂不 AI 化时置 null，并写 `mapping_status: unmapped|deferred` 与 `mapping_reason` |
 
 `suggested_owner` 按层级推导：公共级→AI 平台团队；领域级→对应领域 owner；项目级→项目负责人；个人级→提交人。
 
@@ -84,9 +84,9 @@ title: <一句话标题>
 form: 决策记忆            # 知识库|工程规则|决策记忆|技能工作流
 secondary_tags: []        # 副标签列表
 domains: [DFT]            # 多选≤3；空列表仅当 layer=公共级
-project: HBM              # LPDDR6|HBM|无
+projects: [HBM]           # LPDDR6/HBM 列表；空列表=跨项目
 layer: 领域级              # 个人级|项目级|领域级|公共级
-ai_form: Memory           # Memory|Rule|Skill|Workflow|Hook|Prompt
+ai_form: Memory           # Memory|Rule|Skill|Workflow|Hook|Prompt；或 null + mapping_status
 source: <输入材料名 日期>
 suggested_owner: <owner>
 ---
@@ -110,7 +110,7 @@ manifest.json（机器可读，供入库审批与追溯；技能 B 通过 record
   "source_material": "<输入材料名>",
   "assets": [
     {"id": "A1", "title": "...", "form": "...", "ai_form": "...",
-     "layer": "...", "domains": ["..."], "project": "...", "suggested_owner": "..."}
+     "layer": "...", "domains": ["..."], "projects": ["..."], "suggested_owner": "..."}
   ],
   "filtered": [{"summary": "...", "reason": "..."}]
 }
@@ -141,7 +141,7 @@ python -X utf8 ~/.claude/skills/assetize/scripts/validate.py <proposal-dir>
 ### 8 · 入库申请与人工卡点
 
 - 入库申请由**人**提交到资产 repo（或人明确授权的自动化提交）；本技能只产出申请内容与校验材料。技能不得自行关闭 issue、批准 PR 或合并（R3/R9）。
-- **owner 批准后**：把本批资产升级为 approved asset record——frontmatter 增加 `asset_id`（全局 `EA-<YYYYMMDD>-<序号>`）、`proposal_id`、`status: approved`、`approved_by`、`approved_date`，把 `suggested_owner` 落定为 `owner`，并写入空的 `implementation:` 字段；正文原样——写入 `D:\Project\eng-knowledge-assets\assets\<proposal_id>\`，更新该 repo 的 `INDEX.md` 与 `registry.json`，并留一份评审记录到 `reviews/`。push 由人执行。
+- **owner 批准后**：把本批资产升级为 approved asset record——frontmatter 增加 `asset_id`（全局 `EA-<YYYYMMDD>-<序号>`）、`proposal_id`、`status: approved`、`approved_by`、`approved_date`，把 `suggested_owner` 落定为 `owner`，并写入空的 `implementation:` 字段；正文原样——写入 `$ENG_ASSETS_REPO/assets/<proposal_id>/`（未设置时先询问用户仓库根，不要硬编码作者机器路径），更新该 repo 的 `INDEX.md`、`registry.json` 与 `approvals/<asset_id>.json`，并留一份评审记录到 `reviews/`。push 由人执行。
 - 通过审批入库时，把一行摘要追加进 `~/.claude/asset-proposals/INDEX.md`。下次运行第 2 步前先查两个 INDEX（本地 + 资产 repo）：语义重复的单元不重复提案，标 `duplicate-of:<已有 asset_id>` 进过滤区——资产库膨胀比缺失更伤（灾难性记忆教训）。
 
 ## 质量线

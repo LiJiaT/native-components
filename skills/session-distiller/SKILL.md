@@ -7,7 +7,7 @@ description: 从 Claude Code 历史 session 日志（transcript JSONL）中蒸�
 
 从历史 session 日志中提取可复用经验，分诊到五条车道，经用户确认后写入正式资产库。
 
-完整设计与数据格式见 `~/.claude/self-evolve/DESIGN.md`（分诊表 §5、数据格式 §6、阈值 §4）。本 skill 是该设计的执行入口。
+完整设计与数据格式见 `~/.claude/self-evolve/DESIGN.md`（分诊表 §5、数据格式 §6、阈值 §4；由安装器从组件库 `flows/self-evolution/design/` 复制）。本 skill 是该设计的执行入口。
 
 ## 硬性规则
 
@@ -15,7 +15,7 @@ description: 从 Claude Code 历史 session 日志（transcript JSONL）中蒸�
 2. **写入前必须盘点**：先查现有 skills / CLAUDE.md / rules / MEMORY.md / staging 索引，已有同类就改不新建。
 3. **写入前必须确认**：输出候选表格，用户批准才写。唯一例外见分诊表的 hooks 车道（永远需确认，全自动期也不例外）。
 4. **每条产物带 provenance**：`<!-- 来源: session <id>, <日期>, 理由: <一句话> -->`。
-5. **写入即 git commit（若资产库是 git 仓库）**：`~/.claude` 在 macOS 上曾作为 git 仓库管理，Windows 工作机当前未 init。若 `~/.claude/.git` 存在则每次晋升一个 commit；否则跳过 commit 步骤，并在汇报里注明"资产库非 git 仓库，未 commit"。
+5. **写入即 git commit（资产库必须 git 化）**：规范要求资产库 git 化。若目标资产库不是 git 仓库，晋升 **blocked**，先由人决定初始化仓库或指定已有资产 repo；不得跳过 commit 与回滚路径，也不得把"非 git"当默认放行。
 6. **产物落盘前脱敏**：候选中出现 token/密码/内网地址等敏感值时用 `<REDACTED>` 替换。
 
 ## 工作流
@@ -105,7 +105,7 @@ scripts/extract.sh <session-id> --level 3 --tool-id <toolu_xxx>
    - hook/permission 提案 → 只写候选文件到 staging，**不直接改 settings.json**
 2. 更新 `staging/INDEX.md` 与候选状态（promoted）
 3. 更新游标：`~/.claude/self-evolve/distill-state/<session-id>.json`（DESIGN.md §6.2）
-4. `git -C ~/.claude add -A && git commit -m "distill: <一句话> (cand-xxx)"`
+4. 在目标资产库执行 `git add -A && git commit -m "distill: <一句话> (cand-xxx)"`；非 git 仓库时按硬性规则 5 停止并交人处理。
 
 ### Step 10 · 汇报
 

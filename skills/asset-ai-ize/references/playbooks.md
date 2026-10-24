@@ -31,7 +31,10 @@
 ## Hook
 
 - **产物**：hook 脚本 + `settings.json` 挂接配置片段（不直接改 settings.json——配置片段放 artifacts，安装由人执行或经授权）。
-- **写法**：脚本幂等、带超时与失败静默策略（hook 崩溃不能拖垮会话）；配置片段写明事件名（PreToolUse/PostToolUse/SessionStart 等）与 matcher。
+- **写法**：脚本幂等、带超时；配置片段写明事件名（PreToolUse/PostToolUse/SessionStart 等）与 matcher。**失败语义必须按类型区分**：
+  - 旁路通知/上下文注入：可静默失败（fail-open），不得拖垮会话；
+  - 强制门禁（外发拦截、审批/证据/范围校验）：必须 **fail-closed**，异常、超时、schema 缺失都视为拒绝，并写 audit 日志；
+  - 不允许对门禁 hook 使用"异常 exit 0 放行"。
 - **验收**：脚本语法检查（`python -X utf8 -m py_compile`）；dry-run 一次记入 `tests/`。
 - **注意**：Hook 形态的实质是"必须每次自动强制"的规则——若 statement 只是需要被"知道"而非被"强制"，返回 mapping_issue 建议改 Rule/Memory。
 

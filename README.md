@@ -14,8 +14,12 @@ AI Native 工程流程的可复用基础组件库。组件按类型分目录存�
 |---|---|---|
 | [`skills/`](skills/README.md) | Agent Skill（Claude Code 等） | `assetize`、`asset-ai-ize`、`ai-infra-feedback`、`orchestrator`、`grill-me-with-doc`、`session-distiller` |
 | [`flows/`](flows/README.md) | 多组件编排的端到端流程 | [`self-evolution`](flows/self-evolution/README.md) |
-| [`memory/`](memory/README.md) | 可复用的 memory 条目模板与公共记忆 | `asset-taxonomy.md`、`dft/hbm3e-stack-level-repair-decision.md` |
-| [`rules/`](rules/README.md) | 可复用的工程规则（Rule） | 5 条公共规则（R1/R3/R4/R7/R8）+ `dft/bist-scan-same-cycle-exclusion.md` |
+| [`memory/`](memory/README.md) | 可复用的 memory 条目模板与公共记忆 | `asset-taxonomy.md`；领域目录仅放真实资产 |
+| [`rules/`](rules/README.md) | 可复用的工程规则（Rule） | 5 条公共规则（R1/R3/R4/R7/R8） |
+| [`gates/`](gates/README.md) | 失败关闭的确定性门禁与 PreToolUse 拦截 | `gate.py`、`settings.example.json` |
+| [`schemas/`](schemas/) | approved record / registry / plan / acceptance / install 契约 | 5 个 JSON Schema |
+| [`tools/`](tools/install.py) | 安装、备份、回滚 | `install.py` |
+| [`samples/`](samples/README.md) | 仅用于流程验证的 synthetic 样例 | `synthetic/dft/*`（test-only，不安装） |
 | [`prompts/`](prompts/README.md) | 可复用的提示词模板（Prompt） | 待补充 |
 | [`hooks/`](hooks/README.md) | 确定性钩子脚本与配置示例（Hook） | `orchestrator`、`self-evolve` |
 | [`agents/`](agents/README.md) | 子代理定义（Agent） | `orchestrator` |
@@ -37,6 +41,9 @@ AI Native 工程流程的可复用基础组件库。组件按类型分目录存�
 | [`ai-infra-feedback`](skills/ai-infra-feedback/SKILL.md) | Skill | 组件问题 → 结构化反馈单，默认只落盘 |
 | [公共规则](rules/README.md) | Rule | 规范 §3.4 中已实现的 R1/R3/R4/R7/R8 |
 | [`asset-taxonomy`](memory/asset-taxonomy.md) | Memory | 9 领域 + 2 项目 + 四维正交的分类决策 |
+| [`gate-core`](gates/README.md) | Gate | record/registry/plan/acceptance/external-write/memory/task-package/install 校验 |
+| [`install.py`](tools/install.py) | Tool | 按 registry 安装、备份、回滚；memory 写 MEMORY.md 受管区块；source-only，不随 `--all` 安装 |
+| [`registry.json`](registry.json) | Registry | 公共组件的 name/type/owner/interface/dependencies/version/status |
 
 ## 核心流程
 
@@ -51,7 +58,7 @@ AI Native 工程流程的可复用基础组件库。组件按类型分目录存�
 
 - **技能 A**：收集、分类、映射，产出 proposal package 与入库申请；不写实现、不 push。
 - **技能 B**：按 record 的 `ai_form` 生成 Memory / Rule / Skill / Workflow / Hook / Prompt，完成确定性校验与验收；不改资产语义、不自动发布。
-- **确定性闸门**：`validate.py`（A）、`validate_build.py`（B），退出码即结论。
+- **确定性闸门**：`validate.py`（A）、`validate_build.py`（B，`--release` 为发布层），退出码即结论。record/审批/内容 hash、范围、artifact 元数据与语法错误都会阻断。
 
 ### Orchestrator
 
@@ -64,14 +71,14 @@ AI Native 工程流程的可复用基础组件库。组件按类型分目录存�
         → 人工验收 → 写回资产
 ```
 
-`hooks/orchestrator` 在会话启动时注入编排模式标识，在用户提交 prompt 时做复杂度预分类；两者都是上下文注入，不是审批闸门。
+`hooks/orchestrator` 在会话启动时注入编排模式标识，在用户提交 prompt 时做复杂度预分类；两者都是上下文注入，不是审批闸门。真正的强制门禁在 `gates/gate.py`：计划/验收/外发/record/registry 校验失败关闭，`PreToolUse` 外发拦截默认拒绝。
 
 ### 自进化
 
 ```text
-SessionEnd → 入队（预过滤）→ 后台 worker（L0→L1→L2→L3）
-           → 五车道分诊 → staging 去重 → 人工确认
-           → 写入正式资产（provenance）→ git commit（若启用）
+SessionEnd → enqueue.py（JSON 解析、无 eval）→ 后台 worker.py（L0→L1→L2→L3）
+           → 五车道分诊 → staging schema/脱敏/去重 → 人工确认
+           → 写入正式资产（provenance）→ git commit（资产库必须 git 化）
            → 定期 curator（三期）
 ```
 
@@ -84,32 +91,21 @@ SessionEnd → 入队（预过滤）→ 后台 worker（L0→L1→L2→L3）
 
 ## 安装
 
-Claude Code 用户级安装：
+优先使用安装器（按 registry 复制、备份、写 manifest、支持回滚）：
 
 ```bash
-# 资产化与反馈
-cp -r skills/assetize skills/asset-ai-ize skills/ai-infra-feedback ~/.claude/skills/
-
-# Orchestrator
-mkdir -p ~/.claude/agents ~/.claude/skills ~/.claude/hooks/orchestrator
-cp agents/orchestrator.md ~/.claude/agents/
-cp -r skills/orchestrator skills/grill-me-with-doc ~/.claude/skills/
-cp hooks/orchestrator/*.py ~/.claude/hooks/orchestrator/
-# 再把 hooks/orchestrator/settings.example.json 的 hooks 配置合并进 ~/.claude/settings.json
-
-# 自进化
-mkdir -p ~/.claude/hooks/self-evolve ~/.claude/self-evolve/{queue,staging,distill-state}
-cp -r skills/session-distiller ~/.claude/skills/
-cp hooks/self-evolve/*.sh ~/.claude/hooks/self-evolve/
-# 再把 hooks/self-evolve/settings.example.json 的 hooks 配置合并进 ~/.claude/settings.json
-
-# 公共规则
-cp rules/verilog-filelist-sync.md rules/no-auto-external-actions.md \
-   rules/verify-or-review-before-delivery.md rules/subtask-acceptance-checklist.md \
-   rules/no-raw-records-in-memory.md ~/.claude/rules/
+python tools/install.py --list
+python tools/install.py --all --project-slug <项目 slug>   # test-only 组件默认跳过
+python tools/install.py --rollback ~/.claude/install-manifest-latest.json
 ```
 
-安装前先检查目标环境是否已有同名组件；更新时覆盖对应目录，并保留旧版本以便回滚。`settings.example.json` 只包含 hooks 配置，不含任何凭证。
+安装器只落文件，不改 `settings.json`。hook 需要手动合并配置：
+
+- `hooks/orchestrator/settings.example.json` → `~/.claude/hooks/orchestrator/`
+- `hooks/self-evolve/settings.example.json` → `~/.claude/hooks/self-evolve/`
+- `gates/settings.example.json`（POSIX）或 `gates/settings.windows.example.json`（Windows）启用 PreToolUse 外发拦截
+
+Windows 使用 `win/*.cmd` 包装器；实际安装路径以 `registry.json` 的 `install_dir` 为准（`orchestrator-hooks` → `hooks/orchestrator`，`self-evolve-hooks` → `hooks/self-evolve`）。安装前先检查目标环境是否已有同名组件；更新时覆盖对应目录，并保留旧版本以便回滚。示例配置只包含 hooks，不含任何凭证。
 
 ## 使用
 
@@ -126,10 +122,11 @@ cp rules/verilog-filelist-sync.md rules/no-auto-external-actions.md \
 ## 边界与缺口
 
 - 本库只收公共、可复用组件。个人环境规则（如 `auto-mode-classifier`、`telegram-bot-handlers`）、个人 agent（`claude-env-maintainer`）、外部工具技能（`lark-*` 等）不在此列。
-- 规范 §5.8 的审批/校验闸门（`require-six-elements`、`plan-schema-gate`、`acceptance-evidence-gate` 等）尚未实现；本库现有 hooks 是 fail-open 的上下文注入，不能当作审批门禁。
+- 规范 §5.8 的 16 类门禁中，计划/任务包/依赖/路由/外发/registry/验收/复核已落到 `gates/gate.py` 或校验器；`filelist-sync-gate`、`context-watermark-gate`、`subagent-output-gate` 仍未实现（R1 要求等价人工检查，后两者需 harness 级事件/字段）。逐项状态见 [`gates/README.md`](gates/README.md)。
 - `PDF2MD` 在参考环境中未找到实现，待 owner 提供后收录。
 - 公共规则 EA-20261022-02..06 的源记录在 `eng-knowledge-assets`，构建历史在 `eng-asset-ai-components`；本库是公共分发副本，变更仍走资产化流程。
-- 自进化 worker 尚未接入 `distill-state` 游标，长 session 可能重复全量蒸馏；详见 [`flows/self-evolution/README.md`](flows/self-evolution/README.md)。
+- EA-07/08/09 为 synthetic，已移入 `samples/synthetic/`（test-only），不随安装器安装；生产安装点已撤出。
+- 自进化 worker 已接入 `distill-state` 游标、内容 hash 去重、失败保留与陈旧锁恢复；跨日无会话时仍需按 [`flows/self-evolution/scheduler/`](flows/self-evolution/scheduler/README.md) 配置系统定时任务。
 
 ## 目录约定
 

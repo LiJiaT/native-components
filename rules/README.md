@@ -8,13 +8,13 @@
 
 | 规则 | 对应条款 | 作用 |
 |---|---|---|
-| [`verilog-filelist-sync`](verilog-filelist-sync.md) | R1 | Verilog 文件变更同步更新 filelist |
+| [`verilog-filelist-sync`](verilog-filelist-sync.md) | R1 | Verilog 文件变更同步更新 filelist；filelist hook 未实现，需等价人工检查（experimental） |
 | [`no-auto-external-actions`](no-auto-external-actions.md) | R3 | 对外上传/提交/发布必须由人确认 |
-| [`verify-or-review-before-delivery`](verify-or-review-before-delivery.md) | R4 | 交付前验证或评审，执行方自查 + 独立复核 |
+| [`verify-or-review-before-delivery`](verify-or-review-before-delivery.md) | R4 | 交付前执行方自查 + 独立复核；两类证据必须同时存在，不能用单一评审替代 |
 | [`subtask-acceptance-checklist`](subtask-acceptance-checklist.md) | R7 | 子任务必须携带可逐项判定的验收清单 |
 | [`no-raw-records-in-memory`](no-raw-records-in-memory.md) | R8 | 原始记录不得写入长期记忆 |
 
-这些规则由 `eng-knowledge-assets` 的 EA-20261022-02..06 资产化，本库是公共分发副本；实现包与构建记录仍在 `eng-asset-ai-components`。
+这些规则由 `eng-knowledge-assets` 的 EA-20261022-02..06 资产化，本库是公共分发副本；实现包与构建记录仍在 `eng-asset-ai-components`。R3/R4/R7/R8 已有配套确定性工具（`gates/gate.py`、`task_packager.py`），R1 的 filelist hook 仍是缺口。
 
 ## 规则要求
 

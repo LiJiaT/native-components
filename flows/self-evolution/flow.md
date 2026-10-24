@@ -16,11 +16,11 @@ SessionEnd
 
 | 阶段 | 输入 | 执行者 | 输出 | 完成判定 |
 |---|---|---|---|---|
-| ① 采集 | `SessionEnd` 事件 JSON、transcript | `distill-enqueue.sh` | `queue/jobs.jsonl` 一行 | 解析成功、`tool_use` ≥10、入队成功 |
-| ② 蒸馏 | 队列任务、transcript | `worker.sh` + `session-distiller` 脚本 | staging 候选 | worker 完成且候选落盘、INDEX 更新 |
+| ① 采集 | `SessionEnd` 事件 JSON、transcript | `distill-enqueue.sh` + `enqueue.py` | `queue/jobs.jsonl` 一行 | JSON 逐行解析成功、`tools≥40 OR edits≥3 OR corrections≥2`、非 meta-session、入队成功 |
+| ② 蒸馏 | 队列任务、transcript | `worker.py` + `session-distiller` 脚本 | staging 候选 | 模型 returncode=0、候选通过 schema/脱敏/原始记录检查并落盘、cursor 写入 |
 | ③ 分诊 | 候选、现有资产、staging INDEX | 蒸馏技能 + 模型 | 候选表（新增/合并/supersedes/丢弃） | 每条候选有车道、去处、理由、recurrence |
 | ④ 人工确认 | 候选表 | 人 | 批准/拒绝记录 | 明确批准；hooks 车道永远需确认 |
-| ⑤ 晋升 | 已批准候选 | 人 + 写入脚本/技能 | 正式资产文件 + provenance | 文件写入、INDEX 状态更新、commit（若启用 git） |
+| ⑤ 晋升 | 已批准候选 | 人 + 写入脚本/技能 | 正式资产文件 + provenance | 文件写入、INDEX 状态更新、git commit（资产库必须 git 化） |
 | ⑥ 召回/卫生 | 资产库、使用记录 | curator（三期） | 去重/过期/修补结果 | 语义去重、30/45 天规则执行并留痕 |
 
 ## 五车道分诊
@@ -45,7 +45,9 @@ SessionEnd
 
 ## 失败与回滚
 
-- worker 失败：任务保留在队列，日志写 `queue/worker.log`；修复后重跑。
-- JSON 解析失败：候选不入库，保留任务，避免把半成品写进 staging。
+- 模型失败（非零/超时/空输出/非法 JSON）：任务保留，日志写 `queue/worker.log`，记 stderr；连续 3 次进 `queue/dead-letter.jsonl`，不伪装成"没有资产"。
+- 候选落盘失败：任务保留；已写候选保持原子写，不产生半文件。
+- 陈旧锁：worker 检测 PID/host/时间，超时或 PID 不存在时恢复并留日志，不会永久停摆。
+- 预算 hold：任务保留并写 `queue/HOLD`；SessionStart 可唤醒，跨日无会话时用 `scheduler/` 中登记的 cron/Task Scheduler 唤醒。
 - 误晋升：从资产库删除对应文件/条目，保留 git 历史作为回滚记录；同步更新 INDEX 与游标。
-- hook 异常：旁路能力失败不阻塞会话；不影响已有资产。
+- hook 异常：旁路通知失败不阻塞会话；强制门禁按 fail-closed 处理，不影响已有资产。

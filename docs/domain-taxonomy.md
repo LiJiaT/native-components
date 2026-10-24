@@ -22,7 +22,9 @@
 - 领域级 Rule → `rules/<slug>/`
 - 领域级 Skill / Workflow / Prompt 仍按类型目录存放，用 frontmatter 的 `domains` 标注领域，不强制建领域子目录。
 - 领域是资产归属，不是独立运行时；安装时仍按 AI 形态落到项目 `.claude/` 或用户级 `~/.claude/` 的有效载入点。
+- 领域级资产的 `projects` 只表示**来源项目**，不限制消费范围；消费范围由领域条件判定（如"含 MBIST+scan 的 DFT 设计"），不能按项目名收窄。
 - 项目私有资产放项目 memory / rules，不进本库的领域目录。
+- `provenance_status: synthetic` 的示例**不得**放领域目录，统一放 `samples/synthetic/`（test-only，不安装）。
 
 ## 维护
 

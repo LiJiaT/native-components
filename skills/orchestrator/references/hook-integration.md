@@ -65,7 +65,7 @@ def is_complex(prompt):
 
 ---
 
-### ✅ Hook 3：PreToolUse — 上下文审计
+### ⚠️ Hook 3：PreToolUse — 上下文审计（v2 待实现）
 
 **Hook 事件**：`PreToolUse`
 
@@ -87,7 +87,7 @@ def is_complex(prompt):
 
 ---
 
-### ✅ Hook 4：PostToolBatch — 进度自检
+### ⚠️ Hook 4：PostToolBatch — 进度自检（v2 待实现）
 
 **Hook 事件**：`PostToolBatch`
 
@@ -162,14 +162,13 @@ def is_complex(prompt):
 
 ---
 
-### ❌ 验收阶段
+### ⚠️ 验收阶段（确定性证据 + 独立判断）
 
 **原因**：
-- 需要对照验收清单逐项检查
-- 需要判断通过/不通过并说明原因
-- 需要决定回退策略
+- 验收清单的逐项证据可由工具聚合（`gates/gate.py acceptance`：ID 对账、verdict 重算、reviewer/executor 独立性）
+- 语义是否正确、结论是否成立仍需独立 reviewer 判断
 
-**正确形态**：skill 内的 LLM 推理步骤
+**正确形态**：先用确定性工具聚合证据并拒绝缺项/非独立复核，再由 LLM/人做语义判断；不能只用 LLM 口头结论替代证据文件。
 
 ---
 
@@ -234,4 +233,4 @@ def is_complex(prompt):
 }
 ```
 
-**注意**：Hook 脚本要遵循静默失败原则（异常时 exit 0 不输出），绝不能阻断正常流程。
+**注意**：失败语义必须区分。旁路通知/上下文注入 hook 可静默失败（fail-open），不得拖垮会话；强制门禁 hook（外发拦截、审批/证据/范围校验）必须 fail-closed：异常、超时、schema 缺失都拒绝并写 audit。不得把门禁 hook 写成异常 exit 0 放行。

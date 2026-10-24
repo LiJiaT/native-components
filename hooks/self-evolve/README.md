@@ -6,15 +6,14 @@
 
 | 脚本 | 事件 | 输入 | 输出 / 动作 | 失败策略 |
 |---|---|---|---|---|
-| `distill-enqueue.sh` | `SessionEnd` | `{session_id, transcript_path, ...}` | 预过滤后追加 `~/.claude/self-evolve/queue/jobs.jsonl`，并 fire-and-forget 拉起 worker | 静默 `exit 0` |
-| `distill-notify.sh` | `SessionStart` | 事件 JSON | staging 有待确认候选时输出 `additionalContext`；无候选静默 | 静默 `exit 0` |
+| `distill-enqueue.sh` + `enqueue.py` | `SessionEnd` | `{session_id, transcript_path, ...}` | JSON 逐行解析、L0 阈值过滤、安全追加 `queue/jobs.jsonl`，fire-and-forget 拉起 worker | 静默 `exit 0` + `queue/enqueue.log` |
+| `distill-notify.sh` | `SessionStart` | 事件 JSON | `queue/HOLD` 时尝试唤醒 worker；staging 有待确认候选时输出 `additionalContext` | 静默 `exit 0` |
 
 ## 安装
 
 ```bash
-mkdir -p ~/.claude/hooks/self-evolve
-cp hooks/self-evolve/*.sh ~/.claude/hooks/self-evolve/
-cp -r skills/session-distiller ~/.claude/skills/
+python -X utf8 tools/install.py --component self-evolve-hooks --component session-distiller
+mkdir -p ~/.claude/self-evolve/{queue,staging,distill-state}
 ```
 
 `distill-enqueue.sh` 依赖 `~/.claude/skills/session-distiller/scripts/worker.sh`。把 `settings.example.json` 的 `hooks` 配置合并进 `~/.claude/settings.json`。Windows 使用 `win/*.cmd` 包装器，并按其头部注释调整 Python / Git 路径。
@@ -31,9 +30,11 @@ cp -r skills/session-distiller ~/.claude/skills/
 
 ## 设计要点
 
-- **预过滤**：`transcript` 中 `tool_use` 少于 10 的会话不入队，避免蒸馏 worker 自己的内层会话自指入队。
-- **快进快出**：`SessionEnd` 只做解析、计数和追加一行，不在 hook 内做蒸馏；重活交给后台 worker。
-- **预算与锁**：worker 用 `mkdir` 原子锁去重，并按 `MAX_JOBS_PER_DAY`（默认 3）限流。
+- **安全解析**：`enqueue.py` 不 `eval` 任何字段；逐行解析 transcript 的 `message.content`，兼容空格、单行多工具、Windows 反斜杠/含空格路径。普通会话字段只当数据。
+- **预过滤与 L0 同界**：`tools>=40 OR edits>=3 OR corrections>=2`；排除蒸馏 meta-session。不会把"编辑 3 次"的合格会话提前丢掉。
+- **快进快出**：`SessionEnd` 只解析、计数、追加一行；重活交给 `worker.py`。
+- **预算与锁**：worker 目录锁含 PID/host/时间，陈旧锁可恢复；`MAX_JOBS_PER_DAY` 默认 3，超限任务 held 并写 `queue/HOLD`。
+- **失败保留**：模型非零/超时/空输出/非法 JSON 都保留任务并记 stderr；连续 3 次进 `dead-letter.jsonl`。
 - **失败不阻塞会话**：两个 hook 都是旁路能力，异常时静默退出；不影响用户正常结束或启动会话。
 
 ## 验证
@@ -50,5 +51,6 @@ bash hooks/self-evolve/tests/run-tests.sh
 
 ## 已知限制
 
-- 参考实现的 `worker.sh` 尚未接入 `distill-state` 游标，长 session 可能被重复全量蒸馏；候选去重仍由 staging INDEX 兜底。详见 `flows/self-evolution/README.md`。
+- 跨日且完全没有新会话时，SessionStart 不会触发；需按 [`flows/self-evolution/scheduler/`](../../flows/self-evolution/scheduler/README.md) 配置 cron / Task Scheduler。
 - worker 依赖本机 `claude` CLI；无 CLI 或模型不可用时，队列会保留，不影响会话。
+- 后台模型只被要求不要读取 transcript 全文，但 `--allowedTools` 的权限边界仍依赖 harness；合成秘密 canary 的只读范围测试尚未自动化。

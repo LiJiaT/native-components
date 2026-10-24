@@ -7,7 +7,7 @@
 | 目录 | 事件 | 作用 |
 |---|---|---|
 | [`orchestrator`](orchestrator/README.md) | `SessionStart` / `UserPromptSubmit` | 注入编排模式标识、做复杂度预分类 |
-| [`self-evolve`](self-evolve/README.md) | `SessionEnd` / `SessionStart` | transcript 入队、提醒待确认的蒸馏候选 |
+| [`self-evolve`](self-evolve/README.md) | `SessionEnd` / `SessionStart` | `enqueue.py` 安全入队（无 eval）、提醒待确认候选、跨日唤醒 |
 
 ## 要求
 
@@ -17,6 +17,9 @@
 - 不包含凭证；需要凭证时从环境变量或宿主配置读取。
 - 安装示例只写入受管区块，避免覆盖用户已有配置。
 
-## 约束
+## 失败语义
 
-本目录现有 hooks 都是**旁路上下文注入**，异常时静默放行。规范 §5.8 要求的审批/校验闸门（`require-six-elements`、`plan-schema-gate` 等）需要 fail-closed 实现，不能直接复用这些脚本；目前这些闸门尚未在本仓库落地。
+- **旁路通知/上下文注入**（本目录现有 hooks）：可 fail-open，异常静默退出，不阻塞会话。
+- **强制门禁**：必须 fail-closed，放在 [`gates/`](../gates/README.md)，异常/超时/缺 schema 都拒绝并写 audit。`gates/gate.py external-write` 是 PreToolUse 外发拦截示例，默认 deny。
+
+不要把门禁逻辑写成"异常 exit 0 放行"。规范 §5.8 的 16 类门禁落地状态见 [`gates/README.md`](../gates/README.md)。

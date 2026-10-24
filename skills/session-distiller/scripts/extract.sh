@@ -4,6 +4,7 @@
 #   extract.sh <session-id前缀> --level 1                     # 骨架：用户原话+助手结论
 #   extract.sh <session-id前缀> --level 2 --from N --to M     # 序号窗口内的工具轨迹
 #   extract.sh <session-id前缀> --level 3 --tool-id toolu_xx  # 按 tool_use_id 取完整调用+返回
+#   extract.sh <session-id前缀> --level 3 --tool-id toolu_xx --full  # 不截断（受终端内存限制）
 #   extract.sh --find <session-id前缀>                        # 只定位文件
 set -euo pipefail
 exec python3 - "$@" <<'PYEOF'
@@ -14,6 +15,8 @@ sid = level = None
 frm = to = None
 tool_id = None
 find_only = False
+full = False
+max_input, max_result = 4000, 20000
 i = 0
 while i < len(args):
     a = args[i]
@@ -22,6 +25,9 @@ while i < len(args):
     elif a == "--to": to = int(args[i+1]); i += 2
     elif a == "--tool-id": tool_id = args[i+1]; i += 2
     elif a == "--find": find_only = True; sid = args[i+1]; i += 2
+    elif a == "--full": full = True; i += 1
+    elif a == "--max-input": max_input = int(args[i+1]); i += 2
+    elif a == "--max-result": max_result = int(args[i+1]); i += 2
     elif sid is None: sid = a; i += 1
     else: i += 1
 
@@ -36,6 +42,16 @@ if find_only:
 path = matches[0]
 if len(matches) > 1:
     print(f"# 注意: {len(matches)} 个匹配，使用最新: {path}\n", file=sys.stderr)
+
+def bounded(text, limit, label):
+    """保留上限但绝不静默截断：打印截断标记、原始大小与完整内容定位。"""
+    text = str(text)
+    if full or len(text) <= limit:
+        return text
+    return (text[:limit] +
+            f"\n[TRUNCATED {label}: {len(text)} chars -> {limit}; "
+            f"full content: transcript={path} tool_id={tool_id or '-'}; "
+            f"use --full or --max-{label}={len(text)}]")
 
 SKIP_PREFIX = ("<local-command", "<command-name", "<command-message", "<system-reminder")
 
@@ -114,13 +130,15 @@ elif level == 3:
                 if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("id") == tool_id:
                     print(f"=== TOOL CALL {tool_id} ===")
                     print(f"name: {b.get('name')}")
-                    print(f"input:\n{json.dumps(b.get('input', {}), ensure_ascii=False, indent=2)[:4000]}")
+                    print("input:\n" + bounded(
+                        json.dumps(b.get('input', {}), ensure_ascii=False, indent=2),
+                        max_input, "input"))
                     done_call = True
         elif e.get("type") == "user" and done_call:
             for b in (e.get("message", {}).get("content") or []):
                 if isinstance(b, dict) and b.get("type") == "tool_result" and b.get("tool_use_id") == tool_id:
                     print(f"\n=== RESULT ({'ERROR' if b.get('is_error') else 'OK'}) ===")
-                    print(block_str(b.get("content"), 20000))
+                    print(bounded(block_str(b.get("content")), max_result, "result"))
                     sys.exit(0)
     if not done_call: sys.exit(f"错误: 找不到 tool_use id={tool_id}")
 else:

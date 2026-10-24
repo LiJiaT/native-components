@@ -20,13 +20,13 @@ description: 资产AI化（技能B）：把已批准的工程知识资产（appr
 
 | 输入 | 说明 |
 |---|---|
-| **approved asset record** | 资产 repo 本地 clone（`D:\Project\eng-knowledge-assets`）`assets/` 下的 record 文件，或用户直接给出的 record 路径/asset_id。**必须 `status: approved`**，未批准的拒绝消费并提示先走技能 A 入库 |
+| **approved asset record** | 资产 repo 本地 clone（`$ENG_ASSETS_REPO`，未设置时询问用户）`assets/` 下的 record 文件，或用户直接给出的 record 路径/asset_id。**必须 `status: approved`**，未批准的拒绝消费并提示先走技能 A 入库 |
 | **目标组件 profile** | 实现要落地的环境与约束：目标环境（Claude Code 用户级 `~/.claude/` / 项目级 `.claude/` / 其他 AI IDE）、触发期望、命名偏好、已有相关组件（去重与挂接） |
 
 ## 输出目录
 
 ```
-D:\Project\eng-asset-ai-components\build\<asset_id>\    # AI Infra repo 本地 clone 的 build 工作区
+$ENG_ASSET_COMPONENTS_REPO/build/<asset_id>/    # 实现 repo 本地 clone 的 build 工作区
 ├── implementation.md       # 实现说明：语义保持对照 + 设计取舍 + 测试结果
 ├── build-manifest.json     # 机器可读：asset_id / ai_form / artifacts / tests / mapping_issue
 ├── artifacts/              # 实现物本体（按 ai_form 一或多个文件）
@@ -35,7 +35,7 @@ D:\Project\eng-asset-ai-components\build\<asset_id>\    # AI Infra repo 本地 c
 └── install.md              # 安装说明（装到哪、怎么装、如何回滚）
 ```
 
-`tests/`、`review.md`、`install.md` 是确定性闸门的必查项，缺失即 validate_build.py 失败。
+`tests/`、`review.md`、`install.md` 是确定性闸门的必查项，缺失即 validate_build.py 失败；发布层还要求 `tests/results.json` 与 `review.json`（契约见 [`references/review-contract.md`](references/review-contract.md)）。
 
 ## 流程
 
@@ -55,10 +55,13 @@ D:\Project\eng-asset-ai-components\build\<asset_id>\    # AI Infra repo 本地 c
 
 ```bash
 python -X utf8 ~/.claude/skills/asset-ai-ize/scripts/validate_build.py <build-dir> \
-  --assets-repo D:\Project\eng-knowledge-assets
+  --assets-repo "$ENG_ASSETS_REPO"
+# 发布/分发前必须加 --release
+python -X utf8 ~/.claude/skills/asset-ai-ize/scripts/validate_build.py <build-dir> \
+  --assets-repo "$ENG_ASSETS_REPO" --release
 ```
 
-校验目录结构（含 tests/review）、build-manifest 对账、record 唯一性与状态、proposal_id/ai_form 一致性、敏感信息模式、artifact 完整度。**exit 非 0 = 不得生成实现申请**（R6）。`--assets-repo` 可指向其他资产 repo clone。
+结构层校验目录、manifest 对账、record 完整性与内容 hash、owner/layer/安装范围、artifact 元数据、隐藏文件、敏感信息、原始记录、Hook 语法、tests 显式 FAIL。发布层额外要求 `tests/results.json`、`review.json`、产物 hash 与独立 reviewer。**exit 非 0 = 不得生成实现申请/不得发布**（R6）。`--assets-repo` 可指向其他资产 repo clone。
 
 ### 5 · 验收测试
 
@@ -71,6 +74,7 @@ implementation.md 必含：**语义保持对照表**（statement 每个可复用
 ### 7 · 人工卡点与写回
 
 - 实现申请由**人**提交到 `eng-asset-ai-components`；**组件 owner 评审通过后**分两步落地：① artifacts 从 `build/` 合入 repo 的 `skills/`、`rules/`、`hooks/`、`prompts/`、`components/` 对应目录；② 按 `install.md` 安装到目标运行环境（`~/.claude/` 或项目 `.claude/`）。本技能不自动发布。
+- **个人级资产不进入公共组件库**：只交付给提交人，`release_channel=personal`、`install_target=personal`；synthetic 仅允许 `test-only`/`test-sandbox`。
 - 批准安装后，**写回**资产 repo 中该 record 的 `implementation` 字段（实现位置、日期、package 路径）——这是唯一允许 B 触碰 record 的地方，且只增不改 statement/evidence/mapping。
 - push 由人执行。
 

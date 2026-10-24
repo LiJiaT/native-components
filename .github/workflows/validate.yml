@@ -1,0 +1,37 @@
+name: validate-components
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install --disable-pip-version-check pyyaml
+      - name: Component registry
+        run: python gates/gate.py component-registry --repo .
+      - name: Hook tests
+        run: |
+          PYTHON=python bash hooks/orchestrator/tests/run-tests.sh
+          bash hooks/self-evolve/tests/run-tests.sh
+      - name: Gate regression tests
+        run: bash gates/tests/run-tests.sh
+      - name: Installer tests
+        run: python tools/tests/test_install.py
+      - name: JSON/JSONL syntax
+        run: |
+          python - <<'PY'
+          import json, glob
+          for p in glob.glob('schemas/*.json') + ['registry.json'] + glob.glob('**/*.json', recursive=True):
+              try:
+                  json.load(open(p, encoding='utf-8'))
+              except Exception as e:
+                  raise SystemExit(f'{p}: {e}')
+          print('json ok')
+          PY

@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Shell|shell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "C:/Users/<user>/AppData/Local/Programs/Python/Python314/python.exe \"C:/Users/<user>/.claude/gates/gate.py\" external-write",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

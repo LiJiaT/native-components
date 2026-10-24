@@ -16,13 +16,11 @@
 ## 安装
 
 ```bash
-cp -r skills/session-distiller ~/.claude/skills/
-mkdir -p ~/.claude/hooks/self-evolve
-cp hooks/self-evolve/*.sh ~/.claude/hooks/self-evolve/
+python -X utf8 tools/install.py --component session-distiller   --component self-evolve-hooks --component self-evolution
 mkdir -p ~/.claude/self-evolve/{queue,staging,distill-state}
 ```
 
-把 [`hooks/self-evolve/settings.example.json`](../../hooks/self-evolve/settings.example.json) 的 `hooks` 配置合并进 `~/.claude/settings.json`。Windows 使用 `hooks/self-evolve/win/*.cmd`，按本机 Python / Git 路径调整。
+把 [`hooks/self-evolve/settings.example.json`](../../hooks/self-evolve/settings.example.json) 的 `hooks` 配置合并进 `~/.claude/settings.json`。Windows 包装器（`win/*.cmd`）由安装器一并复制；跨日预算唤醒按 [`scheduler/`](scheduler/README.md) 配置系统定时任务。
 
 ## 运行时不入库
 
@@ -41,11 +39,12 @@ mkdir -p ~/.claude/self-evolve/{queue,staging,distill-state}
 
 - 一期（手动蒸馏）与二期（SessionEnd 入队 + 后台 worker + SessionStart 提醒）已在参考环境跑通。
 - 三期 curator、晋升自动化、Q8 准确率验收尚未实现。
-- **已知限制**：参考实现的 `worker.sh` 尚未接入 `distill-state` 游标，长 session 可能被重复全量蒸馏；当前靠 staging INDEX 的语义去重兜底。后续修复方向是蒸馏前查游标、只蒸增量尾部、蒸完写回。
+- `worker.py` 已接入 `distill-state` 游标（size/mtime/sha256），未变化的会话不重复蒸馏；候选按内容 hash 去重，重复出现累加 `recurrence` 与 `source_sessions`。
+- 模型子进程失败（非零/超时/空输出/非法 JSON）保留任务并记录 stderr；连续 3 次进 `queue/dead-letter.jsonl`。陈旧目录锁按 PID/host/时间恢复。
 - worker 依赖本机 `claude` CLI 与可用模型；模型不可用时任务保留在队列，不影响正常会话。
 
 ## 使用入口
 
 - 手动整理某次会话：对 AI 说“蒸馏 session `<id>`”或“整理一下之前的会话”。
 - 查看待确认候选：看 `~/.claude/self-evolve/staging/INDEX.md` 中标为 `staged` 的行。
-- 晋升：按 `skills/session-distiller` 的 Step 8–10 输出候选表，人工批准后写入并提交（若资产库是 git 仓库）。
+- 晋升：按 `skills/session-distiller` 的 Step 8–10 输出候选表，人工批准后写入并提交；资产库必须 git 化，没有 git 时晋升 blocked。

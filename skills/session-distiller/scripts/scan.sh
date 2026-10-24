@@ -14,7 +14,7 @@ TH_TOOL_CALLS = 40
 TH_FILE_EDITS = 3
 TH_CORRECTIONS = 2
 CORRECTION_WORDS = ["不对", "不是这样", "错了", "别用", "不要用", "actually", "wrong", "no, not that", "instead"]
-EDIT_TOOLS = ('"name":"Write"', '"name":"Edit"', '"name":"NotebookEdit"')
+EDIT_TOOLS = {'Write', 'Edit', 'NotebookEdit'}
 
 args = sys.argv[1:]
 project, top, days, show_all = None, 20, None, False
@@ -36,25 +36,29 @@ for d in sorted(os.listdir(base)):
     for f in glob.glob(os.path.join(dpath, "*.jsonl")):
         st = os.stat(f)
         if days and (now - st.st_mtime) > days * 86400: continue
-        raw = open(f, encoding="utf-8", errors="ignore").read()
-        tool_calls = raw.count('"type":"tool_use"')
-        edits = sum(raw.count(t) for t in EDIT_TOOLS)
-        corrections = 0
+        tool_calls = edits = corrections = 0
         first_user = ""
-        for line in raw.splitlines():
-            try:
-                e = json.loads(line)
-            except Exception:
-                continue
-            if e.get("type") != "user" or e.get("isMeta"): continue
-            c = e.get("message", {}).get("content")
-            text = c if isinstance(c, str) else " ".join(
-                b.get("text", "") for b in c if isinstance(b, dict) and b.get("type") == "text"
-            ) if isinstance(c, list) else ""
-            if not text or text.startswith(("<local-command", "<command-name", "<system-reminder")):
-                continue
-            corrections += sum(1 for w in CORRECTION_WORDS if w.lower() in text.lower())
-            if not first_user: first_user = text[:80].replace("\t", " ").replace("\n", " ")
+        with open(f, encoding="utf-8", errors="ignore") as fh:
+            for line in fh:
+                try:
+                    e = json.loads(line)
+                except Exception:
+                    continue
+                for b in (e.get("message") or {}).get("content") or []:
+                    if isinstance(b, dict) and b.get("type") == "tool_use":
+                        tool_calls += 1
+                        if b.get("name") in EDIT_TOOLS:
+                            edits += 1
+                if e.get("type") != "user" or e.get("isMeta"): continue
+                c = e.get("message", {}).get("content")
+                text = c if isinstance(c, str) else " ".join(
+                    b.get("text", "") for b in c if isinstance(b, dict) and b.get("type") == "text"
+                ) if isinstance(c, list) else ""
+                if not text or text.startswith(("<local-command", "<command-name", "<system-reminder")):
+                    continue
+                corrections += sum(1 for w in CORRECTION_WORDS if w.lower() in text.lower())
+                if not first_user:
+                    first_user = text[:80].replace("\t", " ").replace("\n", " ")
         qualified = tool_calls >= TH_TOOL_CALLS or edits >= TH_FILE_EDITS or corrections >= TH_CORRECTIONS
         score = tool_calls + edits * 10 + corrections * 20
         rows.append((score, qualified, os.path.basename(f)[:-6], d, time.strftime("%Y-%m-%d", time.localtime(st.st_mtime)), tool_calls, edits, corrections, first_user))

@@ -46,7 +46,7 @@ class UsageError(Exception):
 _SECRET_PATTERNS = [
     ("private_key", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----")),
     ("api_key", re.compile(r"\bsk-(?:ant-)?[A-Za-z0-9_-]{6,}\b")),
-    ("github_token", re.compile(r"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}\b")),
+    ("github_token", re.compile(r"\b(?:ghp|gho|ghu|ghs|ghr|github_pat)_[A-Za-z0-9_]{20,}\b")),
     ("aws_key", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
     ("bearer", re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._\-+/=]{8,}")),
     ("auth_header", re.compile(r"(?i)\bauthorization\b\s*:\s*[^\r\n]+")),
@@ -59,12 +59,19 @@ _SECRET_PATTERNS = [
 
 _SECRET_KV = re.compile(
     r"(?i)\b(api[_-]?key|apikey|access[_-]?token|refresh[_-]?token|auth[_-]?token|token|"
-    r"secret|password|passwd|pwd|app[_-]?secret|client[_-]?secret)\b(\s*[:=]\s*)([\"']?)([^\s\"',;&]+)"
+    r"secret|password|passwd|pwd|app[_-]?secret|client[_-]?secret)\b(\s*[:=]\s*)"
+    r"(?:(['\"])(.*?)\3|([^\s\"',;&]+))"
+)
+_SECRET_KEY = re.compile(
+    r"(?i)^(?:api[_-]?key|apikey|access[_-]?token|refresh[_-]?token|auth[_-]?token|"
+    r"token|secret|password|passwd|pwd|app[_-]?secret|client[_-]?secret|"
+    r".*[_-](?:api[_-]?key|token|secret|password))$"
 )
 
 
 def _kv_repl(m: re.Match) -> str:
-    return f"{m.group(1)}{m.group(2)}{m.group(3)}[REDACTED:secret]"
+    quote = m.group(3) or ""
+    return f"{m.group(1)}{m.group(2)}{quote}[REDACTED:secret]{quote}"
 
 
 def redact(text: str, hits: collections.Counter | None = None) -> str:
@@ -83,14 +90,33 @@ def redact(text: str, hits: collections.Counter | None = None) -> str:
     return text
 
 
+_RAW_PATTERNS = [
+    re.compile(r"^\s*\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?\s+"
+               r"(?:DEBUG|TRACE|INFO|WARN(?:ING)?|ERROR|FATAL)\b", re.I),
+    re.compile(r"^\s*(?:Speaker\s*[A-Z0-9]+|说话人\s*[A-Z0-9一二三四五六七八九十]+)\s*[:：]", re.I),
+]
+
+
+def looks_like_raw(text: str) -> bool:
+    hits = sum(1 for line in str(text).splitlines() if any(p.search(line) for p in _RAW_PATTERNS))
+    return hits >= 2
+
+
 def redact_obj(obj, hits: collections.Counter):
-    """递归脱敏 dict/list/str。"""
+    """递归脱敏 dict/list/str；敏感键名整体遮盖值。"""
     if isinstance(obj, str):
         return redact(obj, hits)
     if isinstance(obj, list):
         return [redact_obj(v, hits) for v in obj]
     if isinstance(obj, dict):
-        return {k: redact_obj(v, hits) for k, v in obj.items()}
+        out = {}
+        for k, v in obj.items():
+            if isinstance(k, str) and _SECRET_KEY.match(k) and v not in (None, "", [], {}):
+                out[k] = "[REDACTED:secret]"
+                hits["secret"] += 1
+            else:
+                out[k] = redact_obj(v, hits)
+        return out
     return obj
 
 
@@ -656,9 +682,14 @@ def build_doc(args, input_data: dict) -> dict:
         "paths": {},
         "r8": {
             "raw_logs_written": False,
+            "raw_record_scan": "pass",
             "note": "反馈单只保留结论、证据指针与极短摘录；原始会议/聊天/调试日志未写入。",
         },
     }
+    raw_detected = looks_like_raw(json.dumps(
+        {"issue": doc["issue"], "evidence": doc["evidence"]}, ensure_ascii=False))
+    doc["r8"]["raw_logs_written"] = raw_detected
+    doc["r8"]["raw_record_scan"] = "fail" if raw_detected else "pass"
     return doc
 
 
@@ -809,24 +840,44 @@ def one_line(text: str) -> str:
     return " ".join(str(text).split())
 
 
+def yaml_scalar(value) -> str:
+    """JSON 标量/数组是合法 YAML flow 值；统一保证引号与转义。"""
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, (list, dict)):
+        return json.dumps(value, ensure_ascii=False)
+    return json.dumps(str(value), ensure_ascii=False)
+
+
+def index_cell(text: str) -> str:
+    return one_line(text).replace("|", "\\|").replace("\\|", "\\|")
+
+
 def write_staging_candidate(doc: dict, staging_dir: Path, index: bool) -> tuple[Path | None, Path | None]:
     issue = doc["issue"]
     cand_id = "cand-" + hashlib.sha1(
         (doc["feedback_id"] + doc["title"]).encode("utf-8")).hexdigest()[:8]
-    body_lines = [
-        "---",
-        f"id: {cand_id}",
-        f"created: {doc['created_at'][:10]}",
-        f"source_sessions: {json.dumps([doc['source']['session_id']] if doc['source'].get('session_id') else [], ensure_ascii=False)}",
-        f"user: {doc['reporter']['user']}",
-        "scope: user",
-        "lane: feedback",
-        "status: staged",
-        "supersedes: null",
-        "recurrence: 1",
-        f"feedback_id: {doc['feedback_id']}",
-        f"component: {json.dumps(issue['components'], ensure_ascii=False)}",
-        f"priority: {issue['priority']}",
+    fm = {
+        "id": cand_id,
+        "created": doc["created_at"][:10],
+        "source_sessions": [doc["source"]["session_id"]] if doc["source"].get("session_id") else [],
+        "user": doc["reporter"]["user"],
+        "scope": "user",
+        "lane": "feedback",
+        "status": "staged",
+        "supersedes": None,
+        "recurrence": 1,
+        "feedback_id": doc["feedback_id"],
+        "component": issue["components"],
+        "priority": issue["priority"],
+    }
+    body_lines = ["---"]
+    body_lines += [f"{k}: {yaml_scalar(v)}" for k, v in fm.items()]
+    body_lines += [
         "---",
         f"# [{issue['priority']}] {doc['title']}",
         "",
@@ -857,11 +908,23 @@ def write_staging_candidate(doc: dict, staging_dir: Path, index: bool) -> tuple[
     )
     body_lines.append("")
     cand_path = (staging_dir / f"{cand_id}.md").resolve()
-    write_text(cand_path, "\n".join(body_lines))
+    text = "\n".join(body_lines)
+    write_text(cand_path, text)
+    # 写后解析校验：frontmatter 必须可被 YAML 解析且 status 未被用户字段劫持
+    try:
+        import yaml as _yaml
+        m = re.match(r"^---\s*\n(.*?)\n---\s*\n", text, re.S)
+        parsed = _yaml.safe_load(m.group(1)) if m else None
+        if not isinstance(parsed, dict) or parsed.get("status") != "staged" \
+                or parsed.get("id") != cand_id:
+            raise UsageError("staging 候选 frontmatter 写后解析失败或 status/id 被覆盖")
+    except ImportError:
+        pass
 
     index_path = (staging_dir / "INDEX.md").resolve()
     if index:
-        summary = truncate(f"[{issue['priority']}] {doc['title']}（{', '.join(issue['components'])}）", 80)
+        summary = index_cell(truncate(
+            f"[{issue['priority']}] {doc['title']}（{', '.join(issue['components'])}）", 80))
         row = f"| {cand_id} | feedback | staged | {summary} |\n"
         existing = index_path.read_text(encoding="utf-8") if index_path.exists() else \
             "# Staging Index\n| id | lane | status | 摘要 |\n|---|---|---|---|\n"

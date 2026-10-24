@@ -24,6 +24,7 @@ import re
 import subprocess
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 for _stream in (sys.stdout, sys.stderr):
@@ -43,18 +44,32 @@ AUDIT_LOG = Path(os.environ.get("AI_GATE_AUDIT_LOG",
 APPROVAL_DIR = Path(os.environ.get("AI_GATE_APPROVAL_DIR",
                                    str(Path.home() / ".claude" / "audit" / "approvals")))
 EXTERNAL_PATTERNS = [
-    (r"(?i)\bgit\s+push\b", "git push"),
-    (r"(?i)\bgit\s+remote\s+(add|set-url)\b", "git remote 变更"),
-    (r"(?i)\bgh\s+(pr|release|repo)\s+(create|merge|close|edit|delete|upload)\b", "GitHub 写操作"),
+    # git 的全局参数（-C/-c/--git-dir）必须先于子命令识别
+    (r"(?i)(?:^|[;&|]\s*|\s)git\b[^;&|\n]*?\s(?:push|remote\s+(?:add|set-url|remove|rename)|"
+     r"lfs\s+push)\b", "git 远程写操作"),
+    (r"(?i)\bgh\s+(?:pr|release|repo|issue|gist)\s+(?:create|merge|close|edit|delete|upload|comment)\b",
+     "GitHub 写操作"),
     (r"(?i)\bnpm\s+publish\b", "npm publish"),
-    (r"(?i)\b(twine|pip)\s+.*\bupload\b", "包上传"),
+    (r"(?i)\b(?:twine|pip|python\s+-m\s+twine)\s+.*\bupload\b", "包上传"),
     (r"(?i)\bdocker\s+push\b", "docker push"),
-    (r"(?i)\b(scp|rsync)\b.*[:]", "远程复制"),
-    (r"(?i)\bcurl\b.*\s-X\s*(POST|PUT|PATCH|DELETE)\b", "HTTP 写请求"),
-    (r"(?i)\bInvoke-(WebRequest|RestMethod)\b.*-(Method|Body)\b", "HTTP 写请求"),
-    (r"(?i)\blark-cli\b.*\b(send|create|update|delete)\b", "飞书写操作"),
-    (r"(?i)\bssh\b", "ssh"),
+    (r"(?i)\b(?:scp|rsync)\b.*(?:[:]\S|\s\S+:\S)", "远程复制"),
+    (r"(?i)\bcurl\b.*(?:-X\s*(?:POST|PUT|PATCH|DELETE)|--request\s+(?:POST|PUT|PATCH|DELETE)|"
+     r"-d\b|--data(?:-raw|-binary|-urlencode)?\b|-F\b|--form\b|-T\b|--upload-file\b|--json\b)",
+     "HTTP 写请求"),
+    (r"(?i)\bwget\b.*(?:--post-data|--post-file|--method[= ](?:POST|PUT|PATCH|DELETE)|--body-data)",
+     "HTTP 写请求"),
+    (r"(?i)(?:^|[;&|]\s*|\s)(?:https?|http)\s+(?:POST|PUT|PATCH|DELETE)\b", "HTTP 写请求"),
+    (r"(?i)\bInvoke-(?:WebRequest|RestMethod)\b.*(?:-(?:Method|Body|InFile)\b)", "HTTP 写请求"),
+    (r"(?i)\blark-cli\b.*\b(?:send|create|update|delete|write|upload|move|copy)\b", "飞书写操作"),
+    (r"(?i)\bssh\s+\S", "ssh"),
+    (r"(?i)\b(?:python|node|nodejs)\b.*(?:requests\.(?:post|put|patch|delete)|"
+     r"urlopen\s*\([^)]*data\s*=|axios\.(?:post|put|patch|delete)|"
+     r"fetch\s*\([^)]*method\s*[:=]\s*['\"](?:POST|PUT|PATCH|DELETE))", "脚本网络写请求"),
 ]
+MCP_WRITE_RE = re.compile(
+    r"(?i)(?:^|__)(?:push|create|update|delete|merge|close|edit|upload|send|write|comment|"
+    r"publish|release|add|remove|move|copy|install|run)(?:[_-]|$)")
+EXTERNAL_READ_TOOLS = {"Read", "Grep", "Glob", "Bash", "Shell", "shell", "run_terminal_cmd"}
 SECRET_PATTERNS = [
     re.compile(r"\b(ghp|gho|ghu|ghs|ghr|github_pat)_[A-Za-z0-9_]{16,}"),
     re.compile(r"\bsk-[A-Za-z0-9_\-]{16,}"),
@@ -137,6 +152,108 @@ def as_list(v):
     if v is None:
         return []
     return v if isinstance(v, list) else [v]
+
+
+def valid_date(value):
+    if not isinstance(value, str):
+        return False
+    text = value.strip()
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}(?:[T ][0-9:.+Z-]+)?", text):
+        return False
+    try:
+        datetime.fromisoformat(text.replace("Z", "+00:00"))
+        return True
+    except ValueError:
+        return False
+
+
+def schema_dir():
+    env = os.environ.get("AI_GATE_SCHEMA_DIR")
+    if env:
+        return Path(env)
+    installed = Path(__file__).resolve().parent / "schemas"
+    return installed if installed.is_dir() else REPO / "schemas"
+
+
+def load_schema(name):
+    path = schema_dir() / name
+    try:
+        return json.load(open(path, encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def validate_schema(value, schema, path="$"):
+    """最小 JSON Schema 执行器：覆盖仓库 schema 使用的关键字。
+
+    支持 type/required/properties/additionalProperties/items/enum/const/
+    pattern/minLength/minItems/maxItems/oneOf/anyOf。返回错误列表。
+    """
+    errors = []
+    if not isinstance(schema, dict):
+        return errors
+    if "oneOf" in schema:
+        matched = sum(1 for s in schema["oneOf"] if not validate_schema(value, s, path))
+        if matched != 1:
+            errors.append(f"{path}: oneOf 匹配 {matched} 个分支")
+        return errors
+    if "anyOf" in schema:
+        if not any(not validate_schema(value, s, path) for s in schema["anyOf"]):
+            errors.append(f"{path}: anyOf 无匹配分支")
+        return errors
+    if "const" in schema and value != schema["const"]:
+        errors.append(f"{path}: 应为常量 {schema['const']!r}")
+    if "enum" in schema and value not in schema["enum"]:
+        errors.append(f"{path}: {value!r} 不在枚举 {schema['enum']}")
+    typ = schema.get("type")
+    if typ:
+        types = typ if isinstance(typ, list) else [typ]
+        py_types = {"object": dict, "array": list, "string": str, "integer": int,
+                    "number": (int, float), "boolean": bool, "null": type(None)}
+        if not any(isinstance(value, py_types.get(t, object)) and
+                   not (t in ("integer", "number") and isinstance(value, bool)) for t in types):
+            errors.append(f"{path}: 类型应为 {typ}，实际 {type(value).__name__}")
+            return errors
+    if isinstance(value, str):
+        if "minLength" in schema and len(value) < schema["minLength"]:
+            errors.append(f"{path}: 长度小于 {schema['minLength']}")
+        if "pattern" in schema and not re.search(schema["pattern"], value):
+            errors.append(f"{path}: 不匹配 {schema['pattern']}")
+    if isinstance(value, list):
+        if "minItems" in schema and len(value) < schema["minItems"]:
+            errors.append(f"{path}: 项数少于 {schema['minItems']}")
+        if "maxItems" in schema and len(value) > schema["maxItems"]:
+            errors.append(f"{path}: 项数多于 {schema['maxItems']}")
+        if isinstance(schema.get("items"), dict):
+            for i, item in enumerate(value):
+                errors += validate_schema(item, schema["items"], f"{path}[{i}]")
+    if isinstance(value, dict):
+        for key in schema.get("required", []):
+            if key not in value:
+                errors.append(f"{path}: 缺必填 {key}")
+        props = schema.get("properties") or {}
+        for key, sub in props.items():
+            if key in value:
+                errors += validate_schema(value[key], sub, f"{path}.{key}")
+        if schema.get("additionalProperties") is False:
+            extra = sorted(set(value) - set(props))
+            if extra:
+                errors.append(f"{path}: 不允许的额外字段 {extra}")
+    return errors
+
+
+def check_schema(name, instance, label):
+    schema = load_schema(name)
+    if schema is None:
+        die(f"{label}: 找不到 schema {name}（可用 AI_GATE_SCHEMA_DIR 指定）")
+    errors = validate_schema(instance, schema)
+    if errors:
+        die(f"{label} schema 校验失败: {errors}")
+
+
+def nonempty_items(value):
+    return isinstance(value, list) and value and all(
+        isinstance(x, str) and not is_placeholder(x) for x in value)
 
 
 def find_record(assets_repo, asset_id):
@@ -261,7 +378,24 @@ def cmd_asset_registry(args):
 
 
 def cmd_component_registry(args):
-    reg = json.load(open(Path(args.repo) / "registry.json", encoding="utf-8"))
+    repo = Path(args.repo)
+    if not (repo / "registry.json").is_file():
+        installed = Path(__file__).resolve().parent / "registry.json"
+        if installed.is_file():
+            repo = installed.parent
+    reg_path = repo / "registry.json"
+    if not reg_path.is_file():
+        die(f"找不到 registry.json: {reg_path}（安装时需包含 gate-core 的 registry 快照）")
+    path_repo = repo
+    try:
+        manifest = json.load(open(repo.parent / "install-manifest-latest.json",
+                                  encoding="utf-8"))
+        source_repo = Path(manifest.get("source_repo", ""))
+        if source_repo.is_dir():
+            path_repo = source_repo
+    except Exception:
+        pass
+    reg = json.load(open(reg_path, encoding="utf-8"))
     if reg.get("schema_version") != "1":
         die("component registry schema_version 必须为 '1'")
     comps = reg.get("components")
@@ -290,9 +424,9 @@ def cmd_component_registry(args):
             errors.append(f"{name}: interface 为空")
         if not isinstance(c["dependencies"], list):
             errors.append(f"{name}: dependencies 必须是列表")
-        p = Path(args.repo) / c["path"]
+        p = path_repo / c["path"]
         if not p.exists():
-            errors.append(f"{name}: path 不存在 {c['path']}")
+            errors.append(f"{name}: path 不存在 {c['path']}（repo={path_repo}）")
     known = set(names)
     graph = {c.get("name"): [] for c in comps if isinstance(c, dict)}
     for c in comps:
@@ -326,128 +460,349 @@ def cmd_component_registry(args):
 
 
 def cmd_plan(args):
-    p = json.load(open(args.file, encoding="utf-8"))
-    required = ["goal", "constraints", "inputs", "outputs", "boundaries", "acceptance",
-                "human_gates", "version"]
-    missing = [k for k in required if k not in p]
-    if missing:
-        die(f"计划缺字段: {missing}")
+    try:
+        p = json.load(open(args.file, encoding="utf-8"))
+    except Exception as e:
+        die(f"计划解析失败: {e}")
+    if not isinstance(p, dict):
+        die("计划必须是 JSON 对象")
+    check_schema("plan.schema.json", p, "计划")
     for k in ("constraints", "inputs", "outputs", "boundaries", "acceptance", "human_gates"):
-        if not isinstance(p[k], list) or not p[k]:
-            die(f"计划 {k} 必须是非空列表")
+        if not nonempty_items(p.get(k)):
+            die(f"计划 {k} 必须是非空列表且每项为非占位字符串")
     if not nonempty(p.get("goal")):
         die("计划 goal 为空")
     if not nonempty(p.get("version")):
         die("计划 version 为空")
-    base = {k: v for k, v in p.items() if k != "approval"}
+    base = {k: v for k, v in p.items() if k not in ("approval", "plan_hash")}
     digest = hashlib.sha256(json.dumps(base, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    if p.get("plan_hash") not in (None, "") and p.get("plan_hash") != digest:
+        die("计划 plan_hash 与当前内容不一致")
     if args.require_approval:
-        ap = p.get("approval") or {}
-        if not ap:
+        ap = p.get("approval")
+        if not isinstance(ap, dict) or not ap:
             die("计划未经批准（缺 approval）")
+        if ap.get("decision") != "approved":
+            die(f"计划批准 decision={ap.get('decision')!r}，必须为 approved")
         if ap.get("scope_hash") != digest:
             die("计划批准 scope_hash 与当前计划不一致（计划已变更，需重新确认）")
-        if not nonempty(ap.get("approver")) or not nonempty(ap.get("approved_at")):
-            die("计划 approval 缺 approver/approved_at")
-    ok(f"计划六要素通过（scope_hash={digest[:12]}…）")
+        if not nonempty(ap.get("approver")) or not valid_date(ap.get("approved_at")):
+            die("计划 approval 缺 approver 或 approved_at 不是有效日期")
+        if ap.get("approval_ref") is not None and not nonempty(ap.get("approval_ref")):
+            die("计划 approval_ref 为空")
+    ok(f"计划六要素通过（schema+类型+占位符，scope_hash={digest[:12]}…）")
+
+
+def _resolve(base, value):
+    p = Path(value)
+    return p if p.is_absolute() else Path(base) / p
+
+
+def _check_file_hash(path, expected, label):
+    if not path.is_file():
+        die(f"{label} 证据不存在: {path}")
+    if path.is_dir():
+        die(f"{label} 证据不能是目录: {path}")
+    actual = sha256_raw(path)
+    if expected != actual:
+        die(f"{label} 证据 hash 与记录不一致（文件已变更）")
 
 
 def cmd_acceptance(args):
-    d = json.load(open(args.file, encoding="utf-8"))
-    for k in ("task_id", "criteria", "verdict", "reviewer", "executor", "reviewed_at"):
-        if k not in d:
-            die(f"acceptance 缺 {k}")
+    try:
+        d = json.load(open(args.file, encoding="utf-8"))
+    except Exception as e:
+        die(f"acceptance 解析失败: {e}")
+    check_schema("acceptance.schema.json", d, "acceptance")
+    base = Path(args.base_dir or Path(args.file).resolve().parent)
+    for k in ("task_id", "reviewer", "executor", "reviewed_at"):
+        if not nonempty(d.get(k)):
+            die(f"acceptance.{k} 为空或占位符")
+    if not valid_date(d.get("reviewed_at")):
+        die("acceptance.reviewed_at 不是有效日期")
+    if d.get("independent") is not True:
+        die("acceptance 必须 independent: true")
+    if d.get("reviewer") == d.get("executor"):
+        die("reviewer 与 executor 相同，不是独立复核")
+
+    # 任务包绑定：AC 集合、命令与契约必须来自原任务包
+    tp_rel = d.get("task_package")
+    if not nonempty(tp_rel):
+        die("acceptance 缺 task_package（必须绑定原任务包）")
+    tp_path = _resolve(base, tp_rel)
+    if not tp_path.is_file():
+        die(f"task_package 不存在: {tp_path}")
+    if not nonempty(d.get("task_package_sha256")) or d.get("task_package_sha256") != sha256_raw(tp_path):
+        die("task_package_sha256 缺失或与当前任务包不一致")
+    try:
+        task = json.load(open(tp_path, encoding="utf-8"))
+    except Exception as e:
+        die(f"task_package 解析失败: {e}")
+    if task.get("task_id") != d.get("task_id"):
+        die("acceptance.task_id 与任务包不一致")
+    task_criteria = {c.get("id"): c for c in task.get("acceptance_criteria") or []
+                     if isinstance(c, dict) and c.get("id")}
     crit = d.get("criteria")
     if not isinstance(crit, list) or not crit:
         die("acceptance.criteria 为空")
     ids = [c.get("id") for c in crit if isinstance(c, dict)]
     if len(ids) != len(set(ids)) or any(not nonempty(x) for x in ids):
         die("验收项 id 缺失或重复")
+    if set(ids) != set(task_criteria):
+        die(f"验收项集合与任务包不一致: 结果={sorted(set(ids))} 任务={sorted(task_criteria)}")
+    expected_checklist = hashlib.sha256(json.dumps(
+        task.get("acceptance_criteria"), sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    if d.get("checklist_hash") != expected_checklist:
+        die("acceptance.checklist_hash 与任务包验收清单不一致")
+
     for c in crit:
-        for k in ("expected", "evidence_path", "result"):
+        for k in ("expected", "evidence_path", "result", "evidence_sha256"):
             if not c.get(k):
                 die(f"验收项 {c.get('id')} 缺 {k}")
         if c["result"] not in ("pass", "fail", "blocked"):
             die(f"验收项 {c.get('id')} result 非法")
-        if args.base_dir and not os.path.exists(os.path.join(args.base_dir, c["evidence_path"])):
-            die(f"验收项 {c.get('id')} evidence_path 不存在: {c['evidence_path']}")
-    if d.get("independent") is not True:
-        die("acceptance 必须 independent: true")
-    if d.get("reviewer") == d.get("executor"):
-        die("reviewer 与 executor 相同，不是独立复核")
+        tc = task_criteria.get(c["id"]) or {}
+        if c.get("expected") != tc.get("expected"):
+            die(f"验收项 {c.get('id')} expected 与任务包不一致")
+        if c.get("check_method") != tc.get("check_method"):
+            die(f"验收项 {c.get('id')} check_method 与任务包不一致")
+        ev = _resolve(base, c["evidence_path"])
+        if ev.is_dir():
+            die(f"验收项 {c.get('id')} evidence_path 不能是目录")
+        _check_file_hash(ev, c["evidence_sha256"], f"验收项 {c.get('id')}")
+
+    self_review = d.get("self_review")
+    if not isinstance(self_review, dict) or self_review.get("result") != "pass":
+        die("acceptance 缺 self_review 或结果非 pass（执行方逐项自查证据）")
+    if not nonempty(self_review.get("evidence_path")) or not nonempty(self_review.get("evidence_sha256")):
+        die("self_review 缺 evidence_path/evidence_sha256")
+    self_path = _resolve(base, self_review["evidence_path"])
+    if self_path.is_dir():
+        die("self_review evidence_path 不能是目录")
+    _check_file_hash(self_path, self_review["evidence_sha256"], "self_review")
+
+    art = d.get("artifact_sha256")
+    if not isinstance(art, dict) or not art:
+        die("acceptance 缺 artifact_sha256（产物版本绑定）")
+    for rel, expected in art.items():
+        _check_file_hash(_resolve(base, rel), expected, f"产物 {rel}")
+
     recomputed = ("fail" if any(c["result"] == "fail" for c in crit)
                   else "blocked" if any(c["result"] == "blocked" for c in crit) else "pass")
     if d.get("verdict") != recomputed:
         die(f"verdict={d.get('verdict')!r} 与逐项结果重算 {recomputed!r} 不一致")
     if recomputed != "pass":
         die(f"验收未通过: {recomputed}")
-    ok(f"验收结果一致（{len(crit)} 项全部 pass，独立复核）")
+    ok(f"验收结果与任务包/证据/产物绑定一致（{len(crit)} 项全部 pass，独立复核）")
+
+
+def _iso_expiry(minutes):
+    return time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime(time.time() + minutes * 60))
+
+
+def _approval_key(command=None, tool=None, tool_input=None):
+    if tool:
+        return "mcp:" + tool + ":" + json.dumps(tool_input or {}, sort_keys=True,
+                                                ensure_ascii=False)
+    return command or ""
+
+
+def _approval_path(key):
+    digest = hashlib.sha256(key.encode("utf-8")).hexdigest()
+    return APPROVAL_DIR / f"{digest}.json"
+
+
+def _allowed_signers():
+    return Path(os.environ.get("AI_GATE_ALLOWED_SIGNERS",
+                               str(APPROVAL_DIR / "allowed_signers")))
+
+
+def _verify_signature(ap_path, approval, raw):
+    """返回 True/False；未配置 allowed_signers 时返回 None（兼容模式）。"""
+    signers = _allowed_signers()
+    if not signers.is_file():
+        return None
+    sig = ap_path.with_suffix(".sig")
+    if not sig.is_file():
+        return False
+    principal = str(approval.get("approved_by") or "")
+    try:
+        r = subprocess.run(
+            ["ssh-keygen", "-Y", "verify", "-f", str(signers), "-I", principal,
+             "-n", "ai-gate", "-s", str(sig)],
+            input=raw, capture_output=True, timeout=15)
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
+def _approval_valid(key, ap_path):
+    if not ap_path.is_file():
+        return False, "缺少批准文件"
+    try:
+        raw = ap_path.read_bytes()
+        a = json.loads(raw.decode("utf-8"))
+        key_ok = a.get("key") == key if a.get("key") is not None else (
+            a.get("command") == key)
+        expires = a.get("expires_at")
+        if isinstance(expires, str):
+            exp_ok = valid_date(expires) and datetime.fromisoformat(
+                expires.replace("Z", "+00:00")).timestamp() >= time.time()
+        else:
+            exp_ok = float(expires or 0) >= time.time()
+        signed = _verify_signature(ap_path, a, raw)
+        ok = (key_ok and exp_ok and nonempty(a.get("approved_by"))
+              and a.get("decision", "approved") == "approved"
+              and signed is not False)
+        if signed is False:
+            return False, "批准签名缺失或无效"
+        if not ok:
+            return False, "批准内容/有效期/批准人不符合"
+        return True, "human-signed" if signed else "human-unsigned-compat"
+    except Exception as e:
+        return False, f"批准文件解析失败: {e}"
+
+
+def _emit_external(payload, decision, reason):
+    if payload:
+        print(json.dumps({"hookSpecificOutput": {
+            "hookEventName": "PreToolUse", "permissionDecision": decision,
+            "permissionDecisionReason": reason}}))
+    else:
+        print(("❌ " if decision == "deny" else "✅ ") + reason)
+        if decision == "deny":
+            sys.exit(2)
 
 
 def cmd_external_write(args):
+    try:
+        return _cmd_external_write(args)
+    except SystemExit:
+        raise
+    except Exception as e:
+        # 失败关闭：任何解析/IO/异常都必须给出 deny，不能放行
+        reason = f"外发门禁内部异常，按失败关闭拒绝: {e}"
+        audit("external-write-deny", reason=reason)
+        _emit_external({} if args.command else {"_": True}, "deny", reason)
+        return
+
+
+def _cmd_external_write(args):
+    payload = {}
+    command = ""
+    tool = ""
+    tool_input = {}
     if args.command:
         command = args.command
-        payload = {}
+        hit = next((label for pat, label in EXTERNAL_PATTERNS if re.search(pat, command)), None)
+        key = _approval_key(command=command)
     else:
-        payload = json.load(sys.stdin)
-        tool = payload.get("tool_name", "")
-        if tool not in ("Bash", "Shell", "shell", "run_terminal_cmd"):
-            audit("external-write-allow", tool=tool, reason="非 shell 工具")
-            print(json.dumps({"hookSpecificOutput": {
-                "hookEventName": "PreToolUse", "permissionDecision": "allow"}}))
-            return
-        command = str((payload.get("tool_input") or {}).get("command", ""))
-    hit = next((label for pat, label in EXTERNAL_PATTERNS if re.search(pat, command)), None)
-    if not hit:
-        audit("external-write-allow", command=command, reason="未命中外部写模式")
-        if payload:
-            print(json.dumps({"hookSpecificOutput": {
-                "hookEventName": "PreToolUse", "permissionDecision": "allow"}}))
-        else:
-            ok("未命中外部写模式")
-        return
-    digest = hashlib.sha256(command.encode("utf-8")).hexdigest()
-    ap = APPROVAL_DIR / f"{digest}.json"
-    approved = False
-    if ap.is_file():
+        raw = sys.stdin.read().lstrip("\ufeff").strip()
         try:
-            a = json.load(open(ap, encoding="utf-8"))
-            approved = (a.get("command") == command
-                        and float(a.get("expires_at", 0)) >= time.time()
-                        and nonempty(a.get("approved_by")))
-        except Exception:
-            approved = False
-    if approved:
-        audit("external-write-allow", command=command, reason="human-approval", approval=str(ap))
-        if payload:
-            print(json.dumps({"hookSpecificOutput": {
-                "hookEventName": "PreToolUse", "permissionDecision": "allow"}}))
+            payload = json.loads(raw) if raw else {}
+        except Exception as e:
+            reason = f"PreToolUse 输入不是合法 JSON，按失败关闭拒绝: {e}"
+            audit("external-write-deny", reason=reason)
+            _emit_external({"_": True}, "deny", reason)
+            return
+        tool = str(payload.get("tool_name", ""))
+        tool_input = payload.get("tool_input") or {}
+        if tool.startswith("mcp__") or tool.startswith("mcp_"):
+            short = tool.split("__", 2)[-1] if "__" in tool else tool
+            hit = f"MCP 写操作 {tool}" if MCP_WRITE_RE.search(short) else None
+            key = _approval_key(tool=tool, tool_input=tool_input)
+        elif tool in ("Bash", "Shell", "shell", "run_terminal_cmd"):
+            command = str(tool_input.get("command", ""))
+            hit = next((label for pat, label in EXTERNAL_PATTERNS if re.search(pat, command)), None)
+            key = _approval_key(command=command)
         else:
-            ok("外部写命令已有人工预批准")
+            audit("external-write-allow", tool=tool, reason="非 shell/MCP 工具")
+            _emit_external(payload, "allow", f"非外部写工具: {tool}")
+            return
+    label = command or key
+    if not hit:
+        audit("external-write-allow", tool=tool, command=command, reason="未命中外部写模式")
+        _emit_external(payload, "allow", "未命中外部写模式")
         return
-    reason = (f"外部写动作被 R3 门禁拒绝（{hit}）。需人工预批准："
-              f"python gates/gate.py approve --command \"{command}\" --by <人> --minutes 30")
-    audit("external-write-deny", command=command, reason=hit)
-    if payload:
-        print(json.dumps({"hookSpecificOutput": {
-            "hookEventName": "PreToolUse", "permissionDecision": "deny",
-            "permissionDecisionReason": reason}}))
-    else:
-        print(f"❌ {reason}")
-        sys.exit(2)
+    approved, why = _approval_valid(key, _approval_path(key))
+    if approved:
+        audit("external-write-allow", tool=tool, command=command,
+              reason=why, approval=str(_approval_path(key)))
+        _emit_external(payload, "allow", f"外部写已有人工预批准（{why}）")
+        return
+    reason = (f"外部写动作被 R3 门禁拒绝（{hit}；{why}）。需人工预批准："
+              f"python gates/gate.py approve --by <人> --minutes 30 "
+              f"{'--tool ' + tool + ' --input-json <json>' if tool else '--command \"' + command + '\"'}")
+    audit("external-write-deny", tool=tool, command=command, reason=hit, detail=why)
+    _emit_external(payload, "deny", reason)
 
 
 def cmd_approve(args):
-    digest = hashlib.sha256(args.command.encode("utf-8")).hexdigest()
-    APPROVAL_DIR.mkdir(parents=True, exist_ok=True)
-    ap = APPROVAL_DIR / f"{digest}.json"
-    rec = {"command": args.command, "approved_by": args.by,
+    tool = getattr(args, "tool", None)
+    tool_input = {}
+    if tool:
+        try:
+            tool_input = json.loads(args.input_json or "{}")
+        except Exception as e:
+            die(f"--input-json 解析失败: {e}")
+    key = _approval_key(command=args.command, tool=tool, tool_input=tool_input)
+    if not key:
+        die("必须提供 --command 或 --tool")
+    rec = {"schema_version": "1", "key": key,
+           "command": args.command or "", "tool": tool or "",
+           "approved_by": args.by,
            "approved_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
-           "expires_at": time.time() + args.minutes * 60}
-    ap.write_text(json.dumps(rec, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    audit("external-write-approve", command=args.command, approver=args.by,
-          expires_in_minutes=args.minutes)
-    ok(f"已写入人工预批准（{args.minutes} 分钟内有效）: {ap}")
+           "expires_at": _iso_expiry(args.minutes),
+           "decision": "approved", "approval_method": "unsigned"}
+    APPROVAL_DIR.mkdir(parents=True, exist_ok=True)
+    ap = _approval_path(key)
+    raw = json.dumps(rec, sort_keys=True, ensure_ascii=False, indent=2).encode("utf-8") + b"\n"
+    signers = _allowed_signers()
+    if signers.is_file():
+        key_file = Path(os.environ.get("AI_GATE_APPROVAL_KEY",
+                                       str(Path.home() / ".claude" / "gates" / "approval_key")))
+        if not key_file.is_file():
+            die(f"已启用签名批准但找不到私钥 {key_file}；"
+                "请由人运行 ssh-keygen -t ed25519 -f <key> 并把公钥写入 "
+                f"{signers}（principal={args.by}）")
+        rec["approval_method"] = "ssh-signature"
+        raw = json.dumps(rec, sort_keys=True, ensure_ascii=False, indent=2).encode("utf-8") + b"\n"
+        tmp = ap.with_suffix(".unsigned.tmp")
+        tmp.write_bytes(raw)
+        sig = tmp.with_suffix(".tmp.sig")
+        try:
+            r = subprocess.run(["ssh-keygen", "-Y", "sign", "-f", str(key_file),
+                                "-n", "ai-gate", str(tmp)],
+                               input=b"", capture_output=True, timeout=120)
+        except Exception as e:
+            tmp.unlink(missing_ok=True)
+            die(f"签名调用失败: {e}")
+        if r.returncode != 0:
+            tmp.unlink(missing_ok=True)
+            die("签名失败（私钥可能带口令但当前无交互终端）："
+                f"{(r.stderr or b'').decode('utf-8', 'replace')[:300]}")
+        ap.write_bytes(raw)
+        if sig.is_file():
+            ap.with_suffix(".sig").write_bytes(sig.read_bytes())
+            sig.unlink(missing_ok=True)
+        tmp.unlink(missing_ok=True)
+        if not _verify_signature(ap, rec, raw):
+            ap.unlink(missing_ok=True); ap.with_suffix(".sig").unlink(missing_ok=True)
+            die("签名自检失败，批准未写入")
+    else:
+        ap.write_bytes(raw)
+        ap.with_suffix(".sig").unlink(missing_ok=True)
+    audit("external-write-approve", key=key, approver=args.by,
+          expires_in_minutes=args.minutes, signed=signers.is_file())
+    ok(f"已写入人工预批准（{args.minutes} 分钟内有效，"
+       f"{'签名' if signers.is_file() else '未配置签名/allowed_signers，兼容模式'}）: {ap}")
+
+
+def cmd_security_status(args):
+    signers = _allowed_signers()
+    print(f"allowed_signers: {signers} ({'已配置' if signers.is_file() else '未配置'})")
+    print(f"approval_dir: {APPROVAL_DIR}")
+    print(f"模式: {'签名批准（执行方无法伪造）' if signers.is_file() else '兼容模式（同权进程可伪造批准）'}")
 
 
 def cmd_memory(args):
@@ -480,21 +835,58 @@ def cmd_task_package(args):
     ok("task package 校验通过")
 
 
+def sha256_raw(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def cmd_install(args):
-    m = json.load(open(args.manifest, encoding="utf-8"))
-    for k in ("schema_version", "installed_at", "target_root", "components",
-              "backup_root", "source_commit"):
-        if k not in m:
-            die(f"install manifest 缺 {k}")
-    if m.get("schema_version") != "1":
-        die("install manifest schema_version 必须为 '1'")
+    try:
+        m = json.load(open(args.manifest, encoding="utf-8"))
+    except Exception as e:
+        die(f"install manifest 解析失败: {e}")
+    check_schema("install-manifest.schema.json", m, "install manifest")
+    root = Path(m["target_root"]).resolve()
+    backup_root = Path(m["backup_root"])
+    seen = {}
     for c in m.get("components") or []:
-        for k in ("name", "version", "type", "source", "targets", "hashes"):
-            if k not in c:
-                die(f"install 组件 {c.get('name', '?')} 缺 {k}")
-        if not c.get("targets"):
-            die(f"install 组件 {c.get('name')} 无目标")
-    ok(f"install manifest 通过（{len(m.get('components') or [])} 个组件）")
+        name = c.get("name")
+        targets = c.get("targets") or []
+        hashes = c.get("hashes") or {}
+        actions = c.get("actions") or {}
+        if len(targets) != len(set(targets)):
+            die(f"install 组件 {name} 目标重复")
+        if set(hashes) != set(targets):
+            die(f"install 组件 {name} hashes 与 targets 不一一对应")
+        if set(actions) != set(targets):
+            die(f"install 组件 {name} actions 与 targets 不一一对应")
+        if args.repo and not (Path(args.repo) / c["source"]).exists():
+            die(f"install 组件 {name} source 不存在: {c['source']}")
+        for rel in targets:
+            p = Path(rel)
+            if p.is_absolute() or ".." in p.parts:
+                die(f"install 组件 {name} 目标路径非法: {rel}")
+            if rel in seen:
+                die(f"install 目标重复（{seen[rel]} / {name}）: {rel}")
+            seen[rel] = name
+            dst = root / rel
+            if not dst.is_file():
+                die(f"install 目标不存在: {dst}")
+            actual = sha256_raw(dst)
+            if actual != hashes.get(rel):
+                die(f"install 目标内容与 manifest 不一致（被篡改或安装不完整）: {rel}")
+            action = actions.get(rel)
+            if action not in ("created", "replaced", "unchanged"):
+                die(f"install 目标 {rel} action 非法: {action!r}")
+            if action == "replaced" and not (backup_root / rel).is_file():
+                die(f"install 目标 {rel} 标记 replaced 但缺备份: {backup_root / rel}")
+            if c.get("status") == "test-only" and not rel.startswith("test-sandbox/"):
+                die(f"test-only 组件 {name} 不得安装到生产载入点: {rel}")
+    ok(f"install manifest 与实际文件/hash/唯一目标/范围一致"
+       f"（{len(m.get('components') or [])} 个组件，{len(seen)} 个目标）")
 
 
 def build_parser():
@@ -529,10 +921,15 @@ def build_parser():
     p.set_defaults(func=cmd_external_write)
 
     p = sub.add_parser("approve")
-    p.add_argument("--command", required=True)
+    p.add_argument("--command")
+    p.add_argument("--tool")
+    p.add_argument("--input-json")
     p.add_argument("--by", required=True)
     p.add_argument("--minutes", type=int, default=30)
     p.set_defaults(func=cmd_approve)
+
+    p = sub.add_parser("security-status")
+    p.set_defaults(func=cmd_security_status)
 
     p = sub.add_parser("memory")
     p.add_argument("--file", required=True)
@@ -547,6 +944,7 @@ def build_parser():
 
     p = sub.add_parser("install")
     p.add_argument("--manifest", required=True)
+    p.add_argument("--repo", help="源码仓库根，用于核对组件 source 路径")
     p.set_defaults(func=cmd_install)
     return ap
 

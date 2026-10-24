@@ -7,8 +7,11 @@
       "type": "skill",
       "owner": "AI 平台团队",
       "interface": "输入工程材料，输出 proposal.md + assets/ + manifest.json；CLI: skills/assetize/scripts/validate.py <dir> [--strict]",
-      "dependencies": ["external:pyyaml", "external:eng-knowledge-assets"],
-      "version": "1.0.0",
+      "dependencies": [
+        "external:pyyaml",
+        "external:eng-knowledge-assets"
+      ],
+      "version": "1.1.0",
       "status": "active",
       "path": "skills/assetize",
       "install_target": "user-global"
@@ -18,8 +21,12 @@
       "type": "skill",
       "owner": "AI 平台团队",
       "interface": "输入 approved asset record + 目标环境，输出 build 包；CLI: skills/asset-ai-ize/scripts/validate_build.py <dir> --assets-repo <path> [--release]",
-      "dependencies": ["assetize", "external:pyyaml", "external:eng-knowledge-assets"],
-      "version": "1.0.0",
+      "dependencies": [
+        "assetize",
+        "external:pyyaml",
+        "external:eng-knowledge-assets"
+      ],
+      "version": "1.1.0",
       "status": "active",
       "path": "skills/asset-ai-ize",
       "install_target": "user-global"
@@ -29,8 +36,11 @@
       "type": "skill",
       "owner": "AI 平台团队",
       "interface": "输入组件问题描述/会话证据，输出脱敏 Markdown/JSON 反馈单与 staging 候选；--send 需 --yes",
-      "dependencies": ["external:pyyaml", "external:lark-cli(optional)"],
-      "version": "1.0.0",
+      "dependencies": [
+        "external:pyyaml",
+        "external:lark-cli(optional)"
+      ],
+      "version": "0.2.0",
       "status": "active",
       "path": "skills/ai-infra-feedback",
       "install_target": "user-global"
@@ -40,8 +50,12 @@
       "type": "skill",
       "owner": "AI 平台团队",
       "interface": "复杂任务编排入口：分类→澄清→计划→任务包→验收→写回；scripts/task_packager.py validate --strict",
-      "dependencies": ["grill-me-with-doc", "task-packager", "external:claude-code"],
-      "version": "1.0.0",
+      "dependencies": [
+        "grill-me-with-doc",
+        "task-packager",
+        "external:claude-code"
+      ],
+      "version": "1.1.0",
       "status": "active",
       "path": "skills/orchestrator",
       "install_target": "user-global"
@@ -62,8 +76,12 @@
       "type": "skill",
       "owner": "AI 平台团队",
       "interface": "会话蒸馏：scan/extract/worker；worker.py 消费 ~/.claude/self-evolve/queue/jobs.jsonl，写 staging 候选",
-      "dependencies": ["external:pyyaml", "external:claude-cli", "external:claude-code-hooks"],
-      "version": "2.0.0",
+      "dependencies": [
+        "external:pyyaml",
+        "external:claude-cli",
+        "external:claude-code-hooks"
+      ],
+      "version": "2.1.0",
       "status": "active",
       "path": "skills/session-distiller",
       "install_target": "user-global"
@@ -73,7 +91,11 @@
       "type": "agent",
       "owner": "AI 平台团队",
       "interface": "Claude Code subagent：接收复杂任务，按五步流程委派与验收；依赖 orchestrator skill",
-      "dependencies": ["orchestrator", "grill-me-with-doc", "external:claude-code"],
+      "dependencies": [
+        "orchestrator",
+        "grill-me-with-doc",
+        "external:claude-code"
+      ],
       "version": "1.0.0",
       "status": "active",
       "path": "agents/orchestrator.md",
@@ -84,7 +106,10 @@
       "type": "hook",
       "owner": "AI 平台团队",
       "interface": "SessionStart 环境提示 + UserPromptSubmit 复杂度预分类；fail-open 旁路，不是强制门禁",
-      "dependencies": ["orchestrator", "external:claude-code"],
+      "dependencies": [
+        "orchestrator",
+        "external:claude-code"
+      ],
       "version": "1.0.0",
       "status": "active",
       "path": "hooks/orchestrator",
@@ -96,8 +121,11 @@
       "type": "hook",
       "owner": "AI 平台团队",
       "interface": "SessionEnd 入队 enqueue.py（无 eval、JSON 解析、L0 阈值）+ SessionStart 提醒；runtime 目录 ~/.claude/self-evolve",
-      "dependencies": ["session-distiller", "external:claude-code"],
-      "version": "2.0.0",
+      "dependencies": [
+        "session-distiller",
+        "external:claude-code"
+      ],
+      "version": "2.1.0",
       "status": "active",
       "path": "hooks/self-evolve",
       "install_dir": "self-evolve",
@@ -108,8 +136,12 @@
       "type": "flow",
       "owner": "AI 平台团队",
       "interface": "采集→蒸馏→分诊→人工确认→晋升→召回/卫生；设计文档安装到 ~/.claude/self-evolve/DESIGN.md",
-      "dependencies": ["self-evolve-hooks", "session-distiller", "external:claude-code"],
-      "version": "1.0.0",
+      "dependencies": [
+        "self-evolve-hooks",
+        "session-distiller",
+        "external:claude-code"
+      ],
+      "version": "1.1.0",
       "status": "active",
       "path": "flows/self-evolution",
       "install_target": "user-global"
@@ -119,8 +151,10 @@
       "type": "rule",
       "owner": "AI 平台团队",
       "interface": "R1：Verilog 文件变更必须同步 filelist；filelist 自动 hook 尚未实现，需人工核查",
-      "dependencies": ["external:filelist-sync-hook(not-implemented)"],
-      "version": "1.0.0",
+      "dependencies": [
+        "external:filelist-sync-hook(not-implemented)"
+      ],
+      "version": "1.0.1",
       "status": "experimental",
       "path": "rules/verilog-filelist-sync.md",
       "install_target": "user-global",
@@ -131,8 +165,11 @@
       "type": "rule",
       "owner": "AI 平台团队",
       "interface": "R3：对外上传/推送/提交/发布必须人工确认；配套 gate.py external-write PreToolUse 拦截",
-      "dependencies": ["gate-core", "external:claude-code"],
-      "version": "1.0.0",
+      "dependencies": [
+        "gate-core",
+        "external:claude-code"
+      ],
+      "version": "1.0.1",
       "status": "active",
       "path": "rules/no-auto-external-actions.md",
       "install_target": "user-global",
@@ -143,8 +180,11 @@
       "type": "rule",
       "owner": "AI 平台团队",
       "interface": "R4：交付前执行方自查 + 独立复核双证据；配套 gate.py acceptance 聚合",
-      "dependencies": ["gate-core", "external:claude-code"],
-      "version": "1.1.0",
+      "dependencies": [
+        "gate-core",
+        "external:claude-code"
+      ],
+      "version": "1.2.0",
       "status": "active",
       "path": "rules/verify-or-review-before-delivery.md",
       "install_target": "user-global",
@@ -155,8 +195,11 @@
       "type": "rule",
       "owner": "AI 平台团队",
       "interface": "R7：子任务必须携带可逐项判定验收；配套 task_packager.py --strict",
-      "dependencies": ["task-packager", "external:claude-code"],
-      "version": "1.0.0",
+      "dependencies": [
+        "task-packager",
+        "external:claude-code"
+      ],
+      "version": "1.0.1",
       "status": "active",
       "path": "rules/subtask-acceptance-checklist.md",
       "install_target": "user-global",
@@ -167,8 +210,11 @@
       "type": "rule",
       "owner": "AI 平台团队",
       "interface": "R8：原始记录不得写入长期记忆；配套 gate.py memory 检查",
-      "dependencies": ["gate-core", "external:claude-code"],
-      "version": "1.0.0",
+      "dependencies": [
+        "gate-core",
+        "external:claude-code"
+      ],
+      "version": "1.0.1",
       "status": "active",
       "path": "rules/no-raw-records-in-memory.md",
       "install_target": "user-global",
@@ -191,8 +237,10 @@
       "type": "tool",
       "owner": "AI 平台团队",
       "interface": "任务包 new/validate/list；validate --strict 检查类型/枚举/依赖/路由/独立验收",
-      "dependencies": ["external:python3"],
-      "version": "2.0.0",
+      "dependencies": [
+        "external:python3"
+      ],
+      "version": "2.1.0",
       "status": "active",
       "path": "skills/orchestrator/scripts/task_packager.py",
       "install_target": "user-global"
@@ -202,8 +250,11 @@
       "type": "gate",
       "owner": "AI 平台团队",
       "interface": "失败关闭门禁 CLI：record/asset-registry/component-registry/plan/acceptance/external-write/memory/task-package/install",
-      "dependencies": ["external:pyyaml", "external:python3"],
-      "version": "1.0.0",
+      "dependencies": [
+        "external:pyyaml",
+        "external:python3"
+      ],
+      "version": "1.1.0",
       "status": "active",
       "path": "gates/gate.py",
       "install_target": "user-global"
@@ -214,7 +265,7 @@
       "owner": "AI 平台团队",
       "interface": "approved-record / component-registry / acceptance / plan / install-manifest 的 JSON Schema 契约",
       "dependencies": [],
-      "version": "1.0.0",
+      "version": "1.1.0",
       "status": "active",
       "path": "schemas",
       "install_target": "user-global"
@@ -224,8 +275,11 @@
       "type": "tool",
       "owner": "AI 平台团队",
       "interface": "按 registry 安装/备份/回滚组件；写 install manifest；memory 写 MEMORY.md 受管区块",
-      "dependencies": ["component-schemas", "external:python3"],
-      "version": "1.0.0",
+      "dependencies": [
+        "component-schemas",
+        "external:python3"
+      ],
+      "version": "1.1.0",
       "status": "active",
       "path": "tools/install.py",
       "install_target": "source-only"

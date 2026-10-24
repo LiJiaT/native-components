@@ -472,12 +472,16 @@ def normalize_input_keys(data: dict) -> dict:
     return {aliases.get(k, k): v for k, v in data.items()}
 
 
-def collect_environment(extra_pairs: list[str], transcript_info: dict | None) -> dict:
-    extra: dict[str, str] = {}
+def collect_environment(extra_pairs: list[str], transcript_info: dict | None,
+                        structured: dict | None = None) -> dict:
+    extra: dict = {}
     for pair in extra_pairs or []:
         if "=" in pair:
             k, v = pair.split("=", 1)
             extra[k.strip()] = v.strip()
+    # 保留嵌套 dict/list，统一由 redact_obj 递归脱敏后再渲染/落盘
+    for k, v in (structured or {}).items():
+        extra[k] = v
     cwd = (transcript_info or {}).get("cwd") or os.getcwd()
     git_base = ["git", "-C", cwd] if cwd and Path(cwd).is_dir() else ["git"]
     return {
@@ -611,10 +615,10 @@ def build_doc(args, input_data: dict) -> dict:
 
     extra_env = input_data.get("environment") or {}
     if isinstance(extra_env, dict):
-        env_pairs = [f"{k}={v}" for k, v in extra_env.items()]
+        env = collect_environment(list(args.env or []), transcript_info, extra_env)
     else:
-        env_pairs = []
-    env = collect_environment(list(args.env or []) + env_pairs, transcript_info)
+        env = collect_environment(list(args.env or []), transcript_info,
+                                  {"environment_raw": str(extra_env)})
 
     user = (args.user or input_data.get("user") or os.environ.get("USERNAME")
             or os.environ.get("USER") or "unknown")
@@ -771,7 +775,8 @@ def render_markdown(doc: dict) -> str:
     if env.get("lark_cli_version"):
         lines.append(f"- lark-cli: {env['lark_cli_version']}")
     for k, v in (env.get("extra") or {}).items():
-        lines.append(f"- {k}: {v}")
+        rendered = v if isinstance(v, str) else json.dumps(v, ensure_ascii=False)
+        lines.append(f"- {k}: {rendered}")
     lines.append("")
     lines.append("## 9. 建议动作")
     lines.append("")

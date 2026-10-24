@@ -52,6 +52,10 @@ def sha(path):
     return hashlib.sha256(Path(path).read_bytes().replace(b"\r\n", b"\n")).hexdigest()
 
 
+def sha_raw(path):
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
 def dump_yaml(fm, body):
     import yaml
     return "---\n" + yaml.safe_dump(fm, allow_unicode=True, sort_keys=False).rstrip() + "\n---\n" + body
@@ -61,6 +65,28 @@ def write(p, text):
     p = Path(p)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(text, encoding="utf-8")
+
+
+def queue_jobs(home):
+    q = Path(home) / ".claude/self-evolve/queue"
+    jobs = []
+    if (q / "jobs.jsonl").exists():
+        for line in (q / "jobs.jsonl").read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                jobs.append(json.loads(line))
+    if (q / "inbox").exists():
+        for p in sorted((q / "inbox").glob("*.json")):
+            jobs.append(json.loads(p.read_text(encoding="utf-8")))
+    return jobs
+
+
+def clear_queue(home):
+    q = Path(home) / ".claude/self-evolve/queue"
+    if (q / "jobs.jsonl").exists():
+        (q / "jobs.jsonl").unlink()
+    if (q / "inbox").exists():
+        for p in (q / "inbox").glob("*.json"):
+            p.unlink()
 
 
 # ---------------------------------------------------------------- assets fixture
@@ -85,7 +111,7 @@ def make_assets_repo(root):
     ap = {"schema_version": "1", "asset_id": ASSET_ID, "proposal_id": "prop",
           "record_path": rec.relative_to(root).as_posix(), "record_sha256": sha(rec),
           "content_sha256": content_hash, "approver": "Tester", "decision": "approved",
-          "approved_at": "2026-10-22",
+          "approved_at": "2026-10-22", "release_channel": "component-library",
           "scope": {"layer": "公共级", "projects": [], "domains": [], "ai_form": "Memory",
                     "owner": "测试 owner", "provenance_status": "source-excerpt",
                     "release_channel": "component-library"}}
@@ -124,7 +150,8 @@ def make_build(root, assets_repo, synthetic=False):
     write(b / "build-manifest.json", json.dumps(fm, ensure_ascii=False, indent=2))
     ch = fm["release_channel"]
     write(b / "artifacts" / "memory.md",
-          dump_yaml({"asset_id": ASSET_ID, "provenance_status": fm["provenance_status"],
+          dump_yaml({"asset_id": ASSET_ID, "ai_form": "Memory", "asset_type": "memory",
+                     "provenance_status": fm["provenance_status"],
                      "provenance_note": fm["provenance_note"], "release_channel": ch,
                      "source_record": asset_rel},
                     "# 测试实现\n\n这是实现正文，足够长。\n"))
@@ -158,6 +185,15 @@ def make_proposal(root, variant="valid"):
                 "2026-10-20 12:00:02 DEBUG done\n")
     if variant == "multi":
         fm.update({"project": ["LPDDR6", "HBM"], "layer": "领域级", "domains": ["DFT"]})
+    if variant == "dup_project":
+        fm.update({"projects": ["HBM", "HBM"], "layer": "领域级", "domains": ["DFT"]})
+    if variant == "domains_scalar":
+        fm["domains"] = "DFT"
+    if variant == "raw_long":
+        body = ("## 内容\n\n2026-10-20 12:00:00 DEBUG " + "x" * 200 + "\n")
+    if variant == "raw_date_speaker":
+        body = ("## 内容\n\n2026-10-20 10:00:00 Speaker A: hello\n"
+                "2026-10-20 10:00:05 Speaker B: hi\n")
     if variant == "unmapped":
         fm.update({"ai_form": None, "mapping_status": "deferred",
                    "mapping_reason": "当前阶段不 AI 化，留给领域 owner 决定"})
@@ -272,14 +308,27 @@ def main():
     m["tests"].append("results.json")
     write(bd / "build-manifest.json", json.dumps(m, ensure_ascii=False, indent=2))
     hashes = {p.name: sha(p) for p in (bd / "artifacts").glob("*")}
+    evidence = bd / "tests" / "trigger.md"
     write(bd / "tests" / "results.json", json.dumps({
+        "asset_id": ASSET_ID,
+        "source_record_sha256": m["source_record_sha256"],
+        "source_content_sha256": m["source_content_sha256"],
         "result": "pass", "tested_at": "2026-10-24T10:00:00+08:00", "tested_by": "tester",
-        "commands": [{"command": "true", "exit_code": 0}], "artifact_sha256": hashes},
-        ensure_ascii=False, indent=2))
+        "commands": [{"command": "true", "exit_code": 0}],
+        "consumer_test": {"command": "true", "exit_code": 0,
+                          "executed_at": "2026-10-24T10:00:00+08:00",
+                          "evidence_path": "tests/trigger.md",
+                          "evidence_sha256": sha(evidence)},
+        "artifact_sha256": hashes}, ensure_ascii=False, indent=2))
     write(bd / "review.json", json.dumps({
         "reviewer": "reviewer", "executor": "executor", "independent": True,
         "decision": "approved", "reviewed_at": "2026-10-24", "artifact_sha256": hashes,
-        "checklist": [{"id": "x", "result": "pass"}]}, ensure_ascii=False, indent=2))
+        "source_record_sha256": m["source_record_sha256"],
+        "source_content_sha256": m["source_content_sha256"],
+        "checklist": [{"id": x, "result": "pass", "note": "ok"} for x in
+                      ("record-binding", "manifest-schema", "artifact-provenance",
+                       "sensitive-scan", "syntax", "semantic-preservation", "consumer-test")]},
+        ensure_ascii=False, indent=2))
     r = run_b(bd, assets_repo, release=True)
     check("B/release-complete-accepted", r.returncode == 0, r.stdout[-400:])
 
@@ -315,14 +364,8 @@ def main():
     write(tr, "\n".join(lines) + "\n")
     r = run([PY, "-X", "utf8", str(REPO / "hooks/self-evolve/enqueue.py")], env=env,
             input_text=json.dumps({"session_id": "s1", "transcript_path": str(tr)}))
-    jobs = (home / ".claude/self-evolve/queue/jobs.jsonl")
-    enq_ok = False
-    if jobs.exists():
-        for line in jobs.read_text(encoding="utf-8").splitlines():
-            try:
-                enq_ok = Path(json.loads(line)["transcript_path"]).resolve() == tr.resolve()
-            except Exception:
-                pass
+    enq_ok = any(Path(j["transcript_path"]).resolve() == tr.resolve()
+                 for j in queue_jobs(home))
     check("enqueue/windows-space-path", enq_ok, r.stderr[-300:])
     marker = TMP / "eval-marker.txt"
     r = run([PY, "-X", "utf8", str(REPO / "hooks/self-evolve/enqueue.py")], env=env,
@@ -336,7 +379,8 @@ def main():
                              {"type": "tool_use", "name": "Edit", "input": {}}]}}) for _ in range(3)]) + "\n")
     r = run([PY, "-X", "utf8", str(REPO / "hooks/self-evolve/enqueue.py")], env=env,
             input_text=json.dumps({"session_id": "s2", "transcript_path": str(tr2)}))
-    check("enqueue/edits-only-qualifies", "s2" in jobs.read_text(encoding="utf-8"))
+    check("enqueue/edits-only-qualifies",
+          any(j.get("session_id") == "s2" for j in queue_jobs(home)))
 
     # worker stubs
     stub_ok = TMP / "stub_ok.py"; write(stub_ok, "import sys\nprint('[]')\n")
@@ -344,6 +388,7 @@ def main():
     stub_bad = TMP / "stub_bad.py"; write(stub_bad, "import sys\nprint('[{\"lane\":\"BAD\",\"title\":\"\",\"content\":\"password=SYNTHETIC\",\"reason\":\"\"}]')\n")
     q = home / ".claude/self-evolve/queue"
     # reset queue to one job
+    clear_queue(home)
     write(q / "jobs.jsonl", json.dumps({"session_id": "s1", "transcript_path": str(tr), "enqueued_at": 1}) + "\n")
     r = run([PY, "-X", "utf8", str(REPO / "skills/session-distiller/scripts/worker.py")],
             env={**env, "DISTILLER_CMD": str(stub_fail)})
@@ -406,7 +451,8 @@ def main():
     check("gate/plan-without-approval-rejected", r.returncode != 0)
     base = {k: v for k, v in plan.items()}
     digest = hashlib.sha256(json.dumps(base, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
-    plan["approval"] = {"approver": "Tester", "approved_at": "2026-10-24", "scope_hash": digest}
+    plan["approval"] = {"approver": "Tester", "approved_at": "2026-10-24",
+                        "scope_hash": digest, "decision": "approved"}
     write(pfile, json.dumps(plan, ensure_ascii=False))
     r = run(g + ["plan", "--file", str(pfile), "--require-approval"])
     check("gate/plan-hash-bound", r.returncode == 0, r.stdout[-300:])
@@ -414,9 +460,25 @@ def main():
     write(pfile, json.dumps(plan, ensure_ascii=False))
     r = run(g + ["plan", "--file", str(pfile), "--require-approval"])
     check("gate/plan-change-invalidates-approval", r.returncode != 0)
-    acc = {"task_id": "T1", "criteria": [{"id": "AC-1", "expected": "x",
-            "evidence_path": "plan.json", "result": "pass"}], "verdict": "pass",
-           "reviewer": "same", "executor": "same", "independent": True, "reviewed_at": "2026-10-24"}
+    task = {"task_id": "T1", "acceptance_criteria": [
+        {"id": "AC-1", "description": "d", "expected": "x", "evidence_path": "plan.json",
+         "check_method": "manual", "check_script": "", "independent_review": True,
+         "severity": "major"}]}
+    tfile = TMP / "task.json"; write(tfile, json.dumps(task, ensure_ascii=False))
+    write(TMP / "self.txt", "self review\n")
+    write(TMP / "art.txt", "artifact\n")
+    checklist = hashlib.sha256(json.dumps(task["acceptance_criteria"], sort_keys=True,
+                                           ensure_ascii=False).encode()).hexdigest()
+    acc = {"task_id": "T1", "task_package": "task.json",
+           "task_package_sha256": sha_raw(tfile), "checklist_hash": checklist,
+           "criteria": [{"id": "AC-1", "expected": "x", "check_method": "manual",
+                         "evidence_path": "plan.json", "evidence_sha256": sha_raw(pfile),
+                         "result": "pass"}], "verdict": "pass",
+           "reviewer": "same", "executor": "same", "independent": True,
+           "reviewed_at": "2026-10-24",
+           "self_review": {"result": "pass", "evidence_path": "self.txt",
+                           "evidence_sha256": sha_raw(TMP / "self.txt")},
+           "artifact_sha256": {"art.txt": sha_raw(TMP / "art.txt")}}
     afile = TMP / "acceptance.json"; write(afile, json.dumps(acc, ensure_ascii=False))
     r = run(g + ["acceptance", "--file", str(afile), "--base-dir", str(TMP)])
     check("gate/acceptance-self-review-rejected", r.returncode != 0)
@@ -424,6 +486,10 @@ def main():
     write(afile, json.dumps(acc, ensure_ascii=False))
     r = run(g + ["acceptance", "--file", str(afile), "--base-dir", str(TMP)])
     check("gate/acceptance-independent-pass", r.returncode == 0, r.stdout[-300:])
+    write(TMP / "plan.json", "changed\n")
+    r = run(g + ["acceptance", "--file", str(afile), "--base-dir", str(TMP)])
+    check("gate/acceptance-stale-evidence-rejected", r.returncode != 0)
+    write(pfile, json.dumps(plan, ensure_ascii=False))
     # external-write deny then approve
     env_ap = {"AI_GATE_APPROVAL_DIR": str(TMP / "approvals"),
               "AI_GATE_AUDIT_LOG": str(TMP / "audit.jsonl")}
@@ -436,6 +502,220 @@ def main():
     check("gate/external-write-approved", '"permissionDecision": "allow"' in r.stdout, r.stdout)
     r = run(g + ["component-registry", "--repo", str(REPO)])
     check("gate/component-registry", r.returncode == 0, r.stdout[-300:])
+
+    print("[7] 复审 R01–R25 回归")
+    # R01/R03 外发覆盖与失败关闭
+    for cmd, expect_deny in [
+        ("git -C /tmp/x push origin main", True),
+        ("curl --data x https://example.com", True),
+        ("python -c \"import requests; requests.post('http://x')\"", True),
+        ("curl https://example.com", False),
+    ]:
+        r = run(g + ["external-write", "--command", cmd], env=env_ap)
+        check(f"gate/external/{cmd[:18]}", (r.returncode != 0) == expect_deny,
+              f"exit={r.returncode}")
+    mcp = json.dumps({"tool_name": "mcp__github__push_files", "tool_input": {"x": 1}})
+    r = run(g + ["external-write"], env=env_ap, input_text=mcp)
+    check("gate/external/mcp-write-denied", '"permissionDecision": "deny"' in r.stdout)
+    r = run(g + ["external-write"], env=env_ap, input_text="{invalid")
+    check("gate/external/bad-json-fail-closed",
+          '"permissionDecision": "deny"' in r.stdout and r.returncode == 0, r.stdout)
+
+    # R02 签名批准（临时 key；生产由人持口令私钥）
+    apdir = TMP / "signed-approvals"; apdir.mkdir()
+    key = TMP / "approval_key"
+    import shutil as _sh
+    if _sh.which("ssh-keygen"):
+        run(["ssh-keygen", "-t", "ed25519", "-N", "", "-f", str(key), "-q"])
+        pub = Path(str(key) + ".pub").read_text(encoding="utf-8").strip()
+        (apdir / "allowed_signers").write_text(f"tester {pub}\n", encoding="utf-8")
+        env_sig = {"AI_GATE_APPROVAL_DIR": str(apdir),
+                   "AI_GATE_APPROVAL_KEY": str(key),
+                   "AI_GATE_ALLOWED_SIGNERS": str(apdir / "allowed_signers"),
+                   "AI_GATE_AUDIT_LOG": str(TMP / "audit-sig.jsonl")}
+        hook = json.dumps({"tool_name": "Bash", "tool_input": {"command": "git push origin main"}})
+        r = run(g + ["approve", "--command", "git push origin main", "--by", "tester",
+                     "--minutes", "5"], env=env_sig)
+        check("gate/approve-signed", r.returncode == 0, r.stdout[-200:])
+        r = run(g + ["external-write"], env=env_sig, input_text=hook)
+        check("gate/signed-approval-allows", '"permissionDecision": "allow"' in r.stdout)
+        ap = next(apdir.glob("*.json"))
+        ap.write_text(ap.read_text(encoding="utf-8").replace("tester", "mallory", 1),
+                      encoding="utf-8")
+        r = run(g + ["external-write"], env=env_sig, input_text=hook)
+        check("gate/tampered-approval-denied", '"permissionDecision": "deny"' in r.stdout)
+
+    # R04 计划占位/拒绝批准
+    badplan = {"goal": "完成一个可验证的测试目标", "constraints": [None], "inputs": ["i"],
+               "outputs": ["o"], "boundaries": ["b"], "acceptance": ["a"],
+               "human_gates": ["h"], "version": "1"}
+    write(TMP / "badplan.json", json.dumps(badplan, ensure_ascii=False))
+    r = run(g + ["plan", "--file", str(TMP / "badplan.json")])
+    check("gate/plan-null-items-rejected", r.returncode != 0)
+    reject = dict(plan); reject["approval"] = {"approver": "Tester", "approved_at": "2026-10-24",
+        "scope_hash": hashlib.sha256(json.dumps({k: v for k, v in reject.items() if k != "approval"},
+        sort_keys=True, ensure_ascii=False).encode()).hexdigest(), "decision": "rejected"}
+    write(TMP / "rejectplan.json", json.dumps(reject, ensure_ascii=False))
+    r = run(g + ["plan", "--file", str(TMP / "rejectplan.json"), "--require-approval"])
+    check("gate/plan-rejected-approval-rejected", r.returncode != 0)
+
+    # R05 验收与任务包/证据绑定
+    acc2 = json.loads(json.dumps(acc)); acc2["criteria"][0]["id"] = "AC-OTHER"
+    write(TMP / "acc2.json", json.dumps(acc2, ensure_ascii=False))
+    r = run(g + ["acceptance", "--file", str(TMP / "acc2.json"), "--base-dir", str(TMP)])
+    check("gate/acceptance-wrong-ac-rejected", r.returncode != 0)
+    acc3 = json.loads(json.dumps(acc)); acc3["reviewer"] = ""
+    write(TMP / "acc3.json", json.dumps(acc3, ensure_ascii=False))
+    r = run(g + ["acceptance", "--file", str(TMP / "acc3.json"), "--base-dir", str(TMP)])
+    check("gate/acceptance-empty-reviewer-rejected", r.returncode != 0)
+
+    # R08 A 重复项目/domains 标量；R10 长单行/日期+Speaker
+    for variant, expect in [("dup_project", 1), ("domains_scalar", 1),
+                            ("raw_long", 1), ("raw_date_speaker", 1)]:
+        d = make_proposal(TMP / f"p2-{variant}", variant)
+        r = run([PY, "-X", "utf8", str(REPO / "skills/assetize/scripts/validate.py"), str(d)])
+        check(f"A/reaudit/{variant}", r.returncode == expect,
+              f"exit={r.returncode} expected={expect}\n{r.stdout[-300:]}")
+
+    # R06/R09 B 审批、分类与来源
+    ar2 = TMP / "assets-repo2"; ar2.mkdir()
+    make_assets_repo(ar2)
+    b2, m2 = make_build(TMP / "b2", ar2)
+    ap2 = ar2 / "approvals" / f"{ASSET_ID}.json"
+    bak = ap2.read_text(encoding="utf-8")
+    ap2.unlink()
+    r = run_b(b2, ar2, release=True)
+    check("B/reaudit/no-approval-rejected", r.returncode != 0)
+    a2 = json.loads(bak); a2["decision"] = "rejected"
+    write(ap2, json.dumps(a2, ensure_ascii=False, indent=2))
+    r = run_b(b2, ar2, release=True)
+    check("B/reaudit/rejected-approval-rejected", r.returncode != 0)
+    a2["decision"] = "approved"; write(ap2, json.dumps(a2, ensure_ascii=False, indent=2))
+    m3 = json.loads(json.dumps(m2)); m3["asset_type"] = "hook"
+    write(b2 / "build-manifest.json", json.dumps(m3, ensure_ascii=False, indent=2))
+    r = run_b(b2, ar2)
+    check("B/reaudit/classification-mismatch-rejected", r.returncode != 0)
+    write(b2 / "build-manifest.json", json.dumps(m2, ensure_ascii=False, indent=2))
+    art = b2 / "artifacts" / "memory.md"
+    art.write_text(art.read_text(encoding="utf-8").replace(
+        "这是实现正文，足够长。", "2026-10-20 12:00:00 DEBUG " + "x" * 200), encoding="utf-8")
+    r = run_b(b2, ar2)
+    check("B/reaudit/raw-long-line-rejected", r.returncode != 0)
+    art.write_text(art.read_text(encoding="utf-8").replace(
+        "2026-10-20 12:00:00 DEBUG " + "x" * 200,
+        "2026-10-20 10:00:00 Speaker A: hello\n2026-10-20 10:00:05 Speaker B: hi"),
+        encoding="utf-8")
+    r = run_b(b2, ar2)
+    check("B/reaudit/raw-date-speaker-rejected", r.returncode != 0)
+
+    # R11 任务依赖/独立复核
+    sys.path.insert(0, str(REPO / "skills/orchestrator/scripts"))
+    import task_packager as tp2
+    td = TMP / "tasks2"; td.mkdir()
+    main = tp2.create_task_package("m", "d", "script")
+    main["execution"]["target"] = str(REPO / "skills/orchestrator/scripts/task_packager.py")
+    main["acceptance_criteria"][0].update({"expected": "ok", "evidence_path": "o",
+                                           "independent_review": True})
+    main["dependencies"] = ["T-DEP"]
+    dep = json.loads(json.dumps(main)); dep["task_id"] = "T-DEP"; dep["dependencies"] = []
+    dep["metadata"]["status"] = "blocked"
+    write(td / "main.json", json.dumps(main, ensure_ascii=False))
+    write(td / "dep.json", json.dumps(dep, ensure_ascii=False))
+    r = run([PY, "-X", "utf8", str(REPO / "skills/orchestrator/scripts/task_packager.py"),
+             "validate", str(td / "main.json"), "--strict", "--tasks-dir", str(td)])
+    check("task/reaudit/blocked-dependency-rejected", r.returncode != 0)
+    dep["metadata"]["status"] = "done"; write(td / "dep.json", json.dumps(dep, ensure_ascii=False))
+    r = run([PY, "-X", "utf8", str(REPO / "skills/orchestrator/scripts/task_packager.py"),
+             "validate", str(td / "main.json"), "--strict", "--tasks-dir", str(td)])
+    check("task/reaudit/done-dependency-accepted", r.returncode == 0, r.stdout[-300:])
+    noind = json.loads(json.dumps(main)); noind["dependencies"] = []
+    noind["task_id"] = "T-NOIND"
+    noind["acceptance_criteria"][0].update({"independent_review": False, "severity": "major"})
+    write(td / "noind.json", json.dumps(noind, ensure_ascii=False))
+    r = run([PY, "-X", "utf8", str(REPO / "skills/orchestrator/scripts/task_packager.py"),
+             "validate", str(td / "noind.json"), "--strict"])
+    check("task/reaudit/no-independent-review-rejected", r.returncode != 0)
+
+    # R17 producer 在锁被占用时仍不丢任务
+    q2 = home / ".claude/self-evolve/queue"; clear_queue(home)
+    hold_script = TMP / "hold_lock.py"
+    write(hold_script, (
+        "import os,sys,time\n"
+        "p=sys.argv[1]\n"
+        "f=open(p,'a+')\n"
+        "if os.name=='nt':\n"
+        " import msvcrt; f.seek(0); msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)\n"
+        "else:\n"
+        " import fcntl; fcntl.flock(f.fileno(), fcntl.LOCK_EX|fcntl.LOCK_NB)\n"
+        "print('locked', flush=True)\n"
+        "time.sleep(6)\n"))
+    holder = subprocess.Popen([PY, "-X", "utf8", str(hold_script), str(q2 / ".queue.lock")],
+                              stdout=subprocess.PIPE, text=True)
+    holder.stdout.readline()
+    r = run([PY, "-X", "utf8", str(REPO / "hooks/self-evolve/enqueue.py")], env=env,
+            input_text=json.dumps({"session_id": "s-lock", "transcript_path": str(tr)}))
+    holder.terminate()
+    try:
+        holder.wait(timeout=5)
+    except Exception:
+        holder.kill()
+    check("enqueue/reaudit/lock-held-task-not-lost",
+          any(j.get("session_id") == "s-lock" for j in queue_jobs(home)))
+
+    # R18/R21 引号/JSON 秘密与非法 lane
+    clear_queue(home)
+    for name, payload in [
+        ("quoted", '[{"lane":"rules","title":"t","content":"password=\\"two word synthetic\\"","reason":"r"}]'),
+        ("json", '[{"lane":"rules","title":"t","content":"{\\"api_key\\":\\"SYNTHETIC_VALUE\\"}","reason":"r"}]'),
+        ("lane", '[{"lane":[],"title":"t","content":"a sufficiently long content body","reason":"r"}]'),
+    ]:
+        stub = TMP / f"stub_{name}.py"
+        write(stub, "print(" + repr(payload) + ")\n")
+        write(q2 / "jobs.jsonl", json.dumps({"session_id": f"s-{name}",
+              "transcript_path": str(tr), "enqueued_at": 10}) + "\n")
+        r = run([PY, "-X", "utf8", str(REPO / "skills/session-distiller/scripts/worker.py")],
+                env={**env, "DISTILLER_CMD": str(stub), "MAX_JOBS_PER_DAY": "100"})
+        staged = list((home / ".claude/self-evolve/staging").glob("cand-*.md"))
+        check(f"worker/reaudit/{name}-not-staged", not staged and r.returncode == 0,
+              f"exit={r.returncode} staged={staged}")
+
+    # R19 处理期间追加 tail 不确认完成
+    clear_queue(home)
+    tail_stub = TMP / "stub_tail.py"
+    write(tail_stub, (
+        "import json,os\n"
+        "from pathlib import Path\n"
+        "p=Path(os.environ['TAIL_FILE'])\n"
+        "p.write_text(p.read_text(encoding='utf-8')+'\\n'+json.dumps({'type':'user','message':{'content':'TAIL'}})+'\\n',encoding='utf-8')\n"
+        "print('[]')\n"))
+    write(q2 / "jobs.jsonl", json.dumps({"session_id": "s-tail", "transcript_path": str(tr),
+                                          "enqueued_at": 11}) + "\n")
+    cursor = home / ".claude/self-evolve/distill-state/s-tail.json"
+    cursor.unlink(missing_ok=True)
+    r = run([PY, "-X", "utf8", str(REPO / "skills/session-distiller/scripts/worker.py")],
+            env={**env, "DISTILLER_CMD": str(tail_stub), "TAIL_FILE": str(tr),
+                 "MAX_JOBS_PER_DAY": "100"})
+    cur = json.load(open(cursor, encoding="utf-8")) if cursor.exists() else {}
+    check("worker/reaudit/tail-not-marked-done",
+          cur.get("status") == "stale-input" and
+          any(j.get("session_id") == "s-tail" for j in queue_jobs(home)),
+          f"cursor={cur.get('status')}")
+
+    # R20 嵌套 environment 脱敏
+    sys.path.insert(0, str(REPO / "skills/ai-infra-feedback/scripts"))
+    import importlib
+    import feedback as fb
+    importlib.reload(fb)
+    hits = collections.Counter()
+    nested = fb.redact_obj({"environment": {"nested": {"token": "SYNTHETIC_TOKEN"}}}, hits)
+    check("feedback/reaudit/nested-secret-redacted",
+          "SYNTHETIC_TOKEN" not in json.dumps(nested), nested)
+
+    # R22 extract --max-input=N
+    r = run(["bash", str(REPO / "skills/session-distiller/scripts/extract.sh"), "sess",
+             "--level", "3", "--tool-id", "toolu_x", "--max-input=50000",
+             "--max-result=50000"], env={"HOME": str(ex_home), "USERPROFILE": str(ex_home)})
+    check("extract/reaudit/equals-max-args", "TRUNCATED" not in r.stdout, r.stdout[-200:])
 
     print(f"\n结果: PASS={PASS} FAIL={FAIL}  (fixtures: {TMP})")
     if FAIL:

@@ -67,6 +67,9 @@ RAW_TRANSCRIPT_PATTERNS = [
                r"发言人\s*[A-Z0-9一二三四五六七八九十]+)\s*[:：]", re.I),
     re.compile(r"^\s*\d{1,2}:\d{2}(?::\d{2})?\s+(?:Speaker|说话人|发言人)", re.I),
     re.compile(r"^\s*\[(?:上午|下午)?\s*\d{1,2}:\d{2}(?::\d{2})?\]\s*", re.I),
+    # 旧格式：完整日期时间前缀 + Speaker/说话人
+    re.compile(r"^\s*\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?\s+"
+               r"(?:Speaker|说话人|发言人)\b", re.I),
 ]
 
 
@@ -151,7 +154,9 @@ def require_text(value, field, r, name, min_len=1):
 
 
 def normalize_projects(fm):
-    """返回 (projects, error)。兼容 project 单值/列表与 projects 列表。"""
+    """返回 (projects, error)。projects 必须是列表；project 可单值或列表。"""
+    if "projects" in fm and not isinstance(fm.get("projects"), list):
+        return [], "projects 必须是列表（单项目请用 project 或单元素列表）"
     raw = fm.get("projects") if fm.get("projects") not in (None, "") else fm.get("project")
     if raw is None:
         return [], "缺 project/projects"
@@ -168,6 +173,8 @@ def normalize_projects(fm):
         if v not in PROJECTS:
             return [], f"project 非法: {v}（合法: {sorted(PROJECTS)} 或 无）"
         out.append(v)
+    if len(out) != len(set(out)):
+        return [], f"project 重复: {out}"
     if "无" in [str(x).strip() for x in vals] and len(vals) > 1:
         return [], "project 取值为『无』时不能同时列其他项目"
     return out, None
@@ -178,12 +185,16 @@ def scan_body(body):
     errors, warns = [], []
     raw_hits = 0
     for line in body.splitlines():
-        if any(p.search(line) for p in RAW_LOG_PATTERNS):
+        log_hit = any(p.search(line) for p in RAW_LOG_PATTERNS)
+        if log_hit:
             raw_hits += 1
+            # 单行超长 DEBUG 也是原始日志；不能因为只有一行就放行
+            if len(line.strip()) > 160:
+                raw_hits += 1
         if any(p.search(line) for p in RAW_TRANSCRIPT_PATTERNS):
             raw_hits += 1
     if raw_hits >= 2:
-        errors.append(f"检测到 {raw_hits} 行原始日志/逐字稿特征（时间戳+级别或发言人），"
+        errors.append(f"检测到 {raw_hits} 处原始日志/逐字稿特征（时间戳+级别/长单行或发言人），"
                       "请提炼为结论后再入库")
     for pat, label in SECRET_PATTERNS:
         if pat.search(body):
@@ -269,6 +280,8 @@ def validate(pdir):
                 r.fail("V3", f"{name} 副标签含上下文——上下文不成案，应进已过滤区")
             elif t not in FORMS:
                 r.fail("V3", f"{name} 副标签非法: {t}")
+        if not isinstance(fm.get("domains"), list):
+            r.fail("V3", f"{name} domains 必须是列表")
         domains = as_list(fm.get("domains"))
         if len(domains) > 3:
             r.fail("V3", f"{name} 领域多选超过 3 个")

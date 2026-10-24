@@ -19,6 +19,7 @@ from pathlib import Path
 
 HOME = Path.home()
 QUEUE = HOME / ".claude" / "self-evolve" / "queue"
+INBOX = QUEUE / "inbox"
 LOG = QUEUE / "enqueue.log"
 TH_TOOLS, TH_EDITS, TH_CORR = 40, 3, 2
 CORR_WORDS = ["不对", "不是这样", "错了", "别用", "不要用", "actually", "wrong",
@@ -85,12 +86,24 @@ def is_meta(first_user):
     return ("会话蒸馏" in first_user) or ("extract.sh" in first_user and "--level" in first_user)
 
 
+def atomic_write(path, text):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + f".tmp.{os.getpid()}")
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(text)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+
+
 class FileLock:
-    """跨进程锁：POSIX 用 fcntl，Windows 用 msvcrt；失败时退化为自旋。"""
+    """跨进程锁；超时抛 TimeoutError，绝不在未持锁时进入临界区。"""
     def __init__(self, path, timeout=2.0):
         self.path = str(path)
         self.timeout = timeout
         self.fh = None
+        self.acquired = False
 
     def __enter__(self):
         self.fh = open(self.path, "a+")
@@ -104,21 +117,24 @@ class FileLock:
                 else:
                     import fcntl
                     fcntl.flock(self.fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                self.acquired = True
                 return self
             except Exception:
                 if time.time() >= deadline:
-                    return self
+                    self.fh.close()
+                    raise TimeoutError(f"lock timeout: {self.path}")
                 time.sleep(0.05)
 
     def __exit__(self, *exc):
         try:
-            if os.name == "nt":
-                import msvcrt
-                self.fh.seek(0)
-                msvcrt.locking(self.fh.fileno(), msvcrt.LK_UNLCK, 1)
-            else:
-                import fcntl
-                fcntl.flock(self.fh.fileno(), fcntl.LOCK_UN)
+            if self.acquired:
+                if os.name == "nt":
+                    import msvcrt
+                    self.fh.seek(0)
+                    msvcrt.locking(self.fh.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(self.fh.fileno(), fcntl.LOCK_UN)
         except Exception:
             pass
         try:
@@ -165,13 +181,11 @@ def main():
         "stats": {"tools": tools, "edits": edits, "corrections": corr},
         "schema": 2,
     }
-    line = json.dumps(job, ensure_ascii=False) + "\n"
-    with FileLock(QUEUE / ".queue.lock", timeout=2.0):
-        with open(QUEUE / "jobs.jsonl", "a", encoding="utf-8") as f:
-            f.write(line)
-            f.flush()
-            os.fsync(f.fileno())
-    log(f"enqueued {sid[:8]} tools={tools} edits={edits} corr={corr}")
+    # 唯一 inbox 文件：producer 不需要拿队列锁，避免锁超时丢任务
+    safe = re.sub(r"[^A-Za-z0-9._-]", "_", sid)[:40]
+    name = f"{safe}-{time.time_ns()}-{os.getpid()}.json"
+    atomic_write(INBOX / name, json.dumps(job, ensure_ascii=False) + "\n")
+    log(f"enqueued {sid[:8]} tools={tools} edits={edits} corr={corr} inbox={name}")
 
     # fire-and-forget 拉起 worker；worker 自身有 PID 存活检测的锁
     worker = HOME / ".claude" / "skills" / "session-distiller" / "scripts" / "worker.sh"

@@ -294,7 +294,10 @@ def _validate_strict(pkg, errors, base_dir, tasks_dir=None):
         errors.append("dependencies 不得包含自身 task_id（自依赖）")
     if len(deps) != len(set(deps)):
         errors.append("dependencies 存在重复项")
+    if [d for d in deps if not str(d).startswith("external:")] and not tasks_dir:
+        errors.append("存在内部依赖时必须提供 --tasks-dir，以核对依赖任务已完成")
 
+    major_independent = False
     for i, item in enumerate(pkg.get("acceptance_criteria") or []):
         if not isinstance(item, dict):
             continue
@@ -309,6 +312,10 @@ def _validate_strict(pkg, errors, base_dir, tasks_dir=None):
                     errors.append(f"验收项 {aid}: {detail}")
         if item.get("independent_review") is not True and item.get("severity") == "blocker":
             errors.append(f"验收项 {aid}: blocker 级验收必须 independent_review=true")
+        if item.get("severity") == "major" and item.get("independent_review") is True:
+            major_independent = True
+    if not major_independent:
+        errors.append("至少一项 major 验收必须 independent_review=true（独立复核）")
 
     ex = pkg.get("execution") or {}
     ex_type = ex.get("type")
@@ -353,6 +360,21 @@ def check_dag(pkg, tasks_dir, errors):
             graph[tid] = list(t.get("dependencies") or [])
         except Exception:
             pass
+    for d in pkg.get("dependencies") or []:
+        if d.startswith("external:"):
+            continue
+        if d not in all_tasks:
+            errors.append(f"任务 {pkg.get('task_id')} 依赖不存在: {d}")
+            continue
+        try:
+            dep = json.load(open(os.path.join(tasks_dir, all_tasks[d][0]), encoding="utf-8"))
+        except Exception as e:
+            errors.append(f"依赖 {d} 读取失败: {e}")
+            continue
+        status = (dep.get("metadata") or {}).get("status")
+        if status != "done":
+            errors.append(f"依赖 {d} 状态为 {status!r}，必须为 done 才能派发")
+
     for tid, ds in graph.items():
         for d in ds:
             if d not in ids and not d.startswith("external:"):

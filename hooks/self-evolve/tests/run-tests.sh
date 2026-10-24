@@ -12,6 +12,7 @@ printf '#!/bin/bash\nexit 0\n' > "$TMP/.claude/skills/session-distiller/scripts/
 
 Q="$TMP/.claude/self-evolve/queue"
 J="$Q/jobs.jsonl"
+queue_text() { [ -f "$J" ] && cat "$J"; [ -d "$Q/inbox" ] && cat "$Q"/inbox/*.json 2>/dev/null; }
 last_transcript=""
 
 # 生成 transcript：$1=路径 $2=tool 数 $3=tool 名
@@ -37,7 +38,7 @@ enqueue() { # $1=session id $2=path
 # Case 1: 低活跃 session 不应入队
 SMALL="$TMP/small.jsonl"; printf '{"type":"user","message":{"content":"hi"}}\n' > "$SMALL"
 enqueue sess-small "$SMALL"
-if [ -s "$J" ]; then echo "FAIL: low-activity session should be filtered"; exit 1; fi
+if [ -n "$(queue_text)" ]; then echo "FAIL: low-activity session should be filtered"; exit 1; fi
 echo "PASS: low-activity session is filtered out"
 
 # Case 2: 40 个 tool_use（单行多工具、JSON 带空格）应入队
@@ -51,20 +52,21 @@ open(sys.argv[1], "w", encoding="utf-8").write(
     json.dumps(msg, indent=None) + "\n")
 PY
 enqueue sess-big "$BIG"
-grep -q '"session_id": "sess-big"' "$J" || { echo "FAIL: qualifying session not enqueued"; exit 1; }
+queue_text | grep -q '"session_id": "sess-big"' || { echo "FAIL: qualifying session not enqueued"; exit 1; }
 echo "PASS: 40 tools in one spaced-JSON line is enqueued"
 
 # Case 3: 只有 3 次 Edit 也应入队（L0 OR 条件）
 EDITS="$TMP/edits.jsonl"; make_transcript "$EDITS" 3 Edit
 enqueue sess-edits "$EDITS"
-grep -q '"session_id": "sess-edits"' "$J" || { echo "FAIL: 3 edits should qualify"; exit 1; }
+queue_text | grep -q '"session_id": "sess-edits"' || { echo "FAIL: 3 edits should qualify"; exit 1; }
 echo "PASS: edits-only session is enqueued"
 
 # Case 4: Windows 反斜杠/空格路径原样入队
 SPACE="$TMP/dir with space/t.jsonl"; mkdir -p "$(dirname "$SPACE")"
 make_transcript "$SPACE" 40 Read
 enqueue sess-space "$SPACE"
-python3 - "$J" "$(winpath "$SPACE")" <<'PY' || { echo "FAIL: space/windows path not preserved"; exit 1; }
+queue_text > "$TMP/queue-snapshot.jsonl"
+python3 - "$TMP/queue-snapshot.jsonl" "$(winpath "$SPACE")" <<'PY' || { echo "FAIL: space/windows path not preserved"; exit 1; }
 import json, os, sys
 want = os.path.normcase(os.path.abspath(sys.argv[2]))
 for line in open(sys.argv[1], encoding="utf-8"):

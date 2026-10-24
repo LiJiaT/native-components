@@ -87,17 +87,23 @@ SessionEnd → enqueue.py（JSON 解析、无 eval）→ 后台 worker.py（L0�
 ### 澄清与公共规则
 
 - `grill-me-with-doc` 一次问清目标、约束、输入、输出、边界、验证标准；任一项未明确不进入执行。
-- 公共规则直接对应规范 §3.4 的 R1/R3/R4/R7/R8；领域规则放 `rules/<domain>/`。
+- 公共规则直接对应规范 §2.4 的 R1/R3/R4/R7/R8（原 §3.4 旧引用）；领域规则放 `rules/<domain>/`。
 
 ## 安装
 
-优先使用安装器（按 registry 复制、备份、写 manifest、支持回滚）：
+优先使用安装器（按 registry 复制、唯一事务 ID 备份、逐目标记录 created/replaced/unchanged、支持精确回滚）：
 
 ```bash
 python tools/install.py --list
 python tools/install.py --all --project-slug <项目 slug>   # test-only 组件默认跳过
-python tools/install.py --rollback ~/.claude/install-manifest-latest.json
+python tools/install.py --rollback ~/.claude/install-manifest-<transaction_id>.json
+python ~/.claude/gates/gate.py install --manifest ~/.claude/install-manifest-latest.json
 ```
+
+- 回滚只删除 `created`、恢复 `replaced`；安装前已存在的同内容文件记为 `unchanged`，不会被删除。
+- `MEMORY.md` 受管区块纳入 targets/备份/回滚，回滚保留用户原有正文。
+- `test-only` / `test-sandbox` 组件只落 `~/.claude/test-sandbox/`，即使 `--allow-test-only` 也不进入 `rules/` 或项目 memory。
+- `install-manifest-latest.json` 只代表最近一次事务；完整累计状态见 `install-state.json`。
 
 安装器只落文件，不改 `settings.json`。hook 需要手动合并配置：
 

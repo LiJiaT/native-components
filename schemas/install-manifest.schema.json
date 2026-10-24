@@ -3,25 +3,35 @@
   "$id": "https://ai-native-basic-component/schemas/install-manifest.schema.json",
   "title": "install manifest",
   "type": "object",
-  "required": ["schema_version", "installed_at", "target_root", "components", "backup_root", "source_commit"],
+  "required": ["schema_version", "transaction_id", "mode", "installed_at",
+               "target_root", "components", "backup_root", "source_commit"],
   "properties": {
     "schema_version": {"const": "1"},
+    "transaction_id": {"type": "string", "minLength": 8},
+    "mode": {"enum": ["full", "partial"]},
     "installed_at": {"type": "string"},
     "target_root": {"type": "string"},
     "backup_root": {"type": "string"},
     "source_commit": {"type": "string"},
+    "source_repo": {"type": "string"},
     "components": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["name", "version", "type", "source", "targets", "hashes"],
+        "required": ["name", "version", "type", "status", "source", "targets",
+                     "hashes", "actions"],
         "properties": {
           "name": {"type": "string"},
           "version": {"type": "string"},
           "type": {"type": "string"},
+          "status": {"type": "string"},
           "source": {"type": "string"},
           "targets": {"type": "array", "items": {"type": "string"}},
-          "hashes": {"type": "object"}
+          "hashes": {"type": "object"},
+          "actions": {
+            "type": "object",
+            "additionalProperties": {"enum": ["created", "replaced", "unchanged"]}
+          }
         },
         "additionalProperties": true
       }

@@ -42,6 +42,7 @@ STAGING = SELF_EVOLVE / "staging"
 STATE_DIR = SELF_EVOLVE / "distill-state"
 SKILL_SCRIPTS = HOME / ".claude" / "skills" / "session-distiller" / "scripts"
 JOBS = QUEUE / "jobs.jsonl"
+INBOX = QUEUE / "inbox"
 INDEX = STAGING / "INDEX.md"
 LOCK = QUEUE / ".worker.lock"
 HOLD = QUEUE / "HOLD"
@@ -51,11 +52,14 @@ CORR_WORDS = ["不对", "不是这样", "错了", "别用", "不要用", "actual
 EDIT_TOOLS = {"Write", "Edit", "NotebookEdit"}
 LANES = {"skill", "rules", "claude-md", "hooks", "memory"}
 SECRET_PATTERNS = [
-    re.compile(r"\b(ghp|gho|ghs|github_pat)_[A-Za-z0-9_]{16,}"),
+    re.compile(r"\b(ghp|gho|ghu|ghs|ghr|github_pat)_[A-Za-z0-9_]{16,}"),
     re.compile(r"\bsk-[A-Za-z0-9_\-]{16,}"),
     re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
     re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._\-]{20,}"),
-    re.compile(r"(?i)(password|passwd|pwd|api[_-]?key|secret|token)\s*[:=]\s*\S{6,}"),
+    # key 可带引号，值支持带空格的引号串与 JSON/dict 字符串形式
+    re.compile(r"""(?i)["']?(?:password|passwd|pwd|api[_-]?key|apikey|secret|token|"""
+               r"""access[_-]?token|refresh[_-]?token|auth[_-]?token)["']?\s*[:=]\s*"""
+               r"""(?:"[^"\n]{4,}"|'[^'\n]{4,}'|[^\s,;]{6,})"""),
     re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
 ]
 RAW_PATTERNS = [
@@ -230,24 +234,52 @@ class WorkerLock:
         self.acquired = False
 
 
+def _valid_job(job, source):
+    if not isinstance(job, dict) or not job.get("session_id") or not job.get("transcript_path"):
+        log(f"drop queue item missing fields: {source}")
+        return None
+    return job
+
+
 def read_jobs():
     jobs = []
-    if not JOBS.exists():
-        return jobs
-    for line in open(JOBS, encoding="utf-8", errors="replace"):
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            job = json.loads(line)
-        except Exception:
-            log(f"drop malformed queue line: {line[:120]}")
-            continue
-        if not job.get("session_id") or not job.get("transcript_path"):
-            log(f"drop queue line missing fields: {line[:120]}")
-            continue
-        jobs.append(job)
+    if JOBS.exists():
+        for line in open(JOBS, encoding="utf-8", errors="replace"):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                job = json.loads(line)
+            except Exception:
+                log(f"drop malformed queue line: {line[:120]}")
+                continue
+            job = _valid_job(job, line[:120])
+            if job:
+                jobs.append(job)
+    if INBOX.exists():
+        for p in sorted(INBOX.glob("*.json")):
+            try:
+                job = json.loads(p.read_text(encoding="utf-8"))
+            except Exception as e:
+                log(f"drop malformed inbox {p.name}: {e}")
+                continue
+            job = _valid_job(job, p.name)
+            if job:
+                jobs.append(job)
     return jobs
+
+
+def inbox_items():
+    items = []
+    if INBOX.exists():
+        for p in sorted(INBOX.glob("*.json")):
+            try:
+                job = json.loads(p.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if _valid_job(job, p.name):
+                items.append((p, job))
+    return items
 
 
 def job_key(job):
@@ -302,19 +334,25 @@ def cursor_done(job):
             and cur.get("sha256") == sha256_file(tp))
 
 
-def write_cursor(job, status, candidates=0, error=""):
+def snapshot_file(job):
     tp = Path(job["transcript_path"])
     try:
-        st = tp.stat(); digest = sha256_file(tp)
+        st = tp.stat()
+        return {"size": st.st_size, "mtime": st.st_mtime, "sha256": sha256_file(tp)}
     except OSError:
-        st = None; digest = ""
+        return None
+
+
+def write_cursor(job, status, candidates=0, error="", snapshot=None):
+    """游标只确认模型实际读取的 snapshot，不确认处理结束时的实时文件。"""
+    snap = snapshot or snapshot_file(job) or {}
     data = {
         "session_id": job["session_id"],
         "transcript_path": job["transcript_path"],
         "status": status,
-        "size": st.st_size if st else None,
-        "mtime": st.st_mtime if st else None,
-        "sha256": digest,
+        "size": snap.get("size"),
+        "mtime": snap.get("mtime"),
+        "sha256": snap.get("sha256", ""),
         "enqueued_at": job.get("enqueued_at"),
         "updated_at": time.strftime("%F %T"),
         "candidates": candidates,
@@ -435,7 +473,8 @@ def process_candidates(raw, sid, today):
         title = c.get("title")
         content = c.get("content")
         reason = c.get("reason")
-        if (lane not in LANES or not isinstance(title, str) or not title.strip()
+        if (not isinstance(lane, str) or lane not in LANES
+                or not isinstance(title, str) or not title.strip()
                 or not isinstance(content, str) or len(content.strip()) < 20
                 or not isinstance(reason, str) or not reason.strip()):
             invalid += 1
@@ -468,19 +507,46 @@ def process_candidates(raw, sid, today):
 
 
 def finalize_jobs(remaining_keys, snapshot_keys):
-    """在共享锁内压缩队列：保留未完成/失败/预算保留任务与处理期间新追加的任务。"""
+    """在共享锁内压缩队列：保留未完成/失败/预算保留任务与处理期间新追加的任务。
+
+    producer 不再拿这把锁（写入唯一 inbox 文件），因此此处需要把 inbox 合并进
+    jobs.jsonl；只删除本次快照内的 inbox 文件，处理期间新到的不动。
+    """
     with FileLock(QUEUE / ".queue.lock"):
-        current = read_jobs()
-        seen, keep = set(), []
-        for job in current:
+        merged, seen = [], set()
+        if JOBS.exists():
+            for line in open(JOBS, encoding="utf-8", errors="replace"):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    job = json.loads(line)
+                except Exception:
+                    continue
+                if not isinstance(job, dict) or not job.get("session_id"):
+                    continue
+                key = job_key(job)
+                if key not in seen:
+                    merged.append((job, None)); seen.add(key)
+        inbox = inbox_items()
+        for path, job in inbox:
             key = job_key(job)
             if key in seen:
                 continue
-            # 快照内已完成/丢弃的任务不保留；快照外的新任务必须保留
+            merged.append((job, path)); seen.add(key)
+        keep = []
+        for job, _path in merged:
+            key = job_key(job)
             if key in snapshot_keys and key not in remaining_keys:
                 continue
-            keep.append(job); seen.add(key)
+            keep.append(job)
         atomic_write(JOBS, "".join(json.dumps(j, ensure_ascii=False) + "\n" for j in keep))
+        for path, job in inbox:
+            if job_key(job) in snapshot_keys:
+                try:
+                    path.unlink()
+                except OSError:
+                    pass
     return keep
 
 
@@ -519,7 +585,7 @@ def main():
         log("worker lock held by live process; exit")
         return 0
     try:
-        if not JOBS.exists() or JOBS.stat().st_size == 0:
+        if (not JOBS.exists() or JOBS.stat().st_size == 0) and not any(INBOX.glob("*.json")):
             return 0
         state = load_state()
         jobs = read_jobs()
@@ -568,6 +634,10 @@ def main():
             if dry:
                 log(f"DRY {job['session_id'][:8]}: 达标 tools={tools} edits={edits} corr={corr}")
                 continue
+            snap = snapshot_file(job)
+            if not snap:
+                log(f"drop {job['session_id'][:8]}: transcript 读取失败")
+                continue
             rec.update(status="processing", updated_at=time.time(),
                        attempts=int(rec.get("attempts", 0)) + 1)
             state["jobs"][key] = rec
@@ -612,17 +682,35 @@ def main():
                 remaining.add(key)
                 save_state(state)
                 continue
-            written, invalid, werr = process_candidates(cands, job["session_id"], today)
+            try:
+                written, invalid, werr = process_candidates(cands, job["session_id"], today)
+            except Exception as e:
+                werr = f"候选处理异常: {e}"
+                written, invalid = [], 0
             if werr:
                 log(f"error {job['session_id'][:8]}: {werr}")
                 rec.update(status="failed", last_error=werr, updated_at=time.time())
                 state["jobs"][key] = rec
                 remaining.add(key)
+                write_cursor(job, "failed", error=werr, snapshot=snap)
+                save_state(state)
+                continue
+            now_snap = snapshot_file(job)
+            if not now_snap or now_snap.get("sha256") != snap.get("sha256"):
+                # 模型处理期间 transcript 增长：只确认实际处理的快照，保留任务再消费增量
+                log(f"stale-input {job['session_id'][:8]}: transcript changed during model; "
+                    "keep job for next run")
+                rec.update(status="stale-input", last_error="transcript changed during model",
+                           updated_at=time.time())
+                state["jobs"][key] = rec
+                remaining.add(key)
+                write_cursor(job, "stale-input", candidates=len(written), error="tail appended",
+                             snapshot=snap)
                 save_state(state)
                 continue
             cnt += 1
             write_count(cnt)
-            write_cursor(job, "done", candidates=len(written))
+            write_cursor(job, "done", candidates=len(written), snapshot=snap)
             rec.update(status="done", updated_at=time.time(), candidates=len(written),
                        last_error="")
             state["jobs"][key] = rec

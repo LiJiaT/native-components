@@ -2,7 +2,7 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash|Shell|shell",
+        "matcher": "Bash|Shell|shell|mcp__.*",
         "hooks": [
           {
             "type": "command",
@@ -11,6 +11,24 @@
           }
         ]
       }
+    ]
+  },
+  "permissions": {
+    "deny": [
+      "Bash(git push:*)",
+      "Bash(git -C * push:*)",
+      "Bash(git remote add:*)",
+      "Bash(gh pr create:*)",
+      "Bash(gh release create:*)",
+      "Bash(npm publish:*)",
+      "Bash(docker push:*)",
+      "Bash(twine upload:*)",
+      "Bash(scp:*)",
+      "mcp__github__push_files",
+      "mcp__github__create_pull_request",
+      "mcp__github__merge_pull_request",
+      "mcp__github__create_or_update_file",
+      "mcp__github__delete_file"
     ]
   }
 }

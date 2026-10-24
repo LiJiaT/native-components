@@ -28,6 +28,9 @@ while i < len(args):
     elif a == "--full": full = True; i += 1
     elif a == "--max-input": max_input = int(args[i+1]); i += 2
     elif a == "--max-result": max_result = int(args[i+1]); i += 2
+    elif a.startswith("--max-input="): max_input = int(a.split("=", 1)[1]); i += 1
+    elif a.startswith("--max-result="): max_result = int(a.split("=", 1)[1]); i += 1
+    elif a.startswith("--level="): level = int(a.split("=", 1)[1]); i += 1
     elif sid is None: sid = a; i += 1
     else: i += 1
 

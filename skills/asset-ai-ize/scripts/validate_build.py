@@ -35,10 +35,15 @@ except ImportError:
 DEFAULT_ASSETS_REPO = os.environ.get("ENG_ASSETS_REPO", r"D:\Project\eng-knowledge-assets")
 
 AI_FORMS = {"Memory", "Rule", "Skill", "Workflow", "Hook", "Prompt"}
+AI_FORM_TO_ASSET_TYPE = {"Memory": "memory", "Rule": "rule", "Skill": "skill",
+                         "Workflow": "workflow", "Hook": "hook", "Prompt": "prompt"}
 LAYERS = {"个人级", "项目级", "领域级", "公共级"}
 PROVENANCE = {"verified", "source-excerpt", "synthetic"}
 INSTALL_TARGETS = {"user-global", "user-domain", "project", "personal", "test-sandbox"}
 RELEASE_CHANNELS = {"component-library", "personal", "test-only"}
+REQUIRED_CHECKLIST = {"record-binding", "manifest-schema", "artifact-provenance",
+                      "sensitive-scan", "syntax", "semantic-preservation",
+                      "consumer-test"}
 MANIFEST_REQUIRED = [
     "schema_version", "package_version", "asset_id", "proposal_id", "ai_form",
     "asset_type", "layer", "projects", "domains", "owner", "provenance_status",
@@ -78,6 +83,8 @@ RAW_TRANSCRIPT_PATTERNS = [
     re.compile(r"^\s*(?:Speaker\s*[A-Z0-9]+|说话人\s*[A-Z0-9一二三四五六七八九十]+|"
                r"发言人\s*[A-Z0-9一二三四五六七八九十]+)\s*[:：]", re.I),
     re.compile(r"^\s*\d{1,2}:\d{2}(?::\d{2})?\s+(?:Speaker|说话人|发言人)", re.I),
+    re.compile(r"^\s*\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?\s+"
+               r"(?:Speaker|说话人|发言人)\b", re.I),
 ]
 TEXT_EXTS = {".md", ".yaml", ".yml", ".py", ".json", ".sh", ".txt", ".cmd", ".ps1", ".toml", ".ini", ".cfg"}
 DOC_EXTS = {".md", ".yaml", ".yml"}
@@ -135,6 +142,20 @@ def nonempty_text(value):
     return isinstance(value, str) and not is_placeholder(value)
 
 
+def valid_date(value):
+    if not isinstance(value, str):
+        return False
+    text = value.strip()
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}(?:[T ][0-9:.+Z-]+)?", text):
+        return False
+    from datetime import datetime
+    try:
+        datetime.fromisoformat(text.replace("Z", "+00:00"))
+        return True
+    except ValueError:
+        return False
+
+
 def as_list(v):
     if v is None:
         return []
@@ -145,10 +166,15 @@ def scan_text(text):
     errors, warns = [], []
     raw = 0
     for line in text.splitlines():
-        if any(p.search(line) for p in RAW_LOG_PATTERNS + RAW_TRANSCRIPT_PATTERNS):
+        log_hit = any(p.search(line) for p in RAW_LOG_PATTERNS)
+        if log_hit:
+            raw += 1
+            if len(line.strip()) > 160:
+                raw += 1
+        if any(p.search(line) for p in RAW_TRANSCRIPT_PATTERNS):
             raw += 1
     if raw >= 2:
-        errors.append(f"疑似原始日志/逐字稿（{raw} 行时间戳/发言人特征），应提炼后写入")
+        errors.append(f"疑似原始日志/逐字稿（{raw} 处时间戳/长单行/发言人特征），应提炼后写入")
     for pat, label, severity in SENSITIVE_PATTERNS:
         if pat.search(text):
             (errors if severity == "fail" else warns).append(f"疑似{label}")
@@ -201,6 +227,57 @@ def find_records(assets_repo, asset_id):
         if fm and fm.get("asset_id") == asset_id:
             hits.append((f, fm, body))
     return hits
+
+
+def check_approval(r, assets_repo, manifest, rfm, body, rel, record_file):
+    aid = manifest.get("asset_id", "")
+    apath = os.path.join(assets_repo, "approvals", f"{aid}.json")
+    if not os.path.isfile(apath):
+        r.fail("B3", f"缺上游审批文件 approvals/{aid}.json；B 不得只凭 record.status=approved 发布")
+        return False
+    try:
+        a = json.load(open(apath, encoding="utf-8"))
+    except Exception as e:
+        r.fail("B3", f"审批文件解析失败: {e}")
+        return False
+    required = ("asset_id", "proposal_id", "record_path", "record_sha256",
+                "content_sha256", "approver", "approved_at", "decision",
+                "scope", "release_channel")
+    missing = [k for k in required if k not in a]
+    if missing:
+        r.fail("B3", f"审批文件缺字段 {missing}")
+        return False
+    if a.get("asset_id") != aid:
+        r.fail("B3", "审批文件 asset_id 不符")
+    if a.get("proposal_id") != rfm.get("proposal_id"):
+        r.fail("B3", "审批文件 proposal_id 与 record 不一致")
+    if norm_rel(str(a.get("record_path", ""))) != rel:
+        r.fail("B3", f"审批 record_path={a.get('record_path')!r} 与 record 实际 {rel} 不一致")
+    if not nonempty_text(a.get("approver")) or len(str(a.get("approver")).strip()) < 2:
+        r.fail("B3", "审批 approver 为空或过短")
+    if not valid_date(a.get("approved_at")):
+        r.fail("B3", f"审批 approved_at 不是有效日期: {a.get('approved_at')!r}")
+    if a.get("decision") != "approved":
+        r.fail("B3", f"审批 decision={a.get('decision')!r}，不得消费")
+    if a.get("record_sha256") != sha256_file(record_file):
+        r.fail("B3", "审批 record hash 与当前文件不一致（record 已变更，需重新批准）")
+    if a.get("content_sha256") != record_content_hash(rfm, body):
+        r.fail("B3", "审批正文 hash 与当前 record 不一致")
+    scope = a.get("scope") or {}
+    for key in ("layer", "ai_form", "owner", "provenance_status"):
+        if scope.get(key) != rfm.get(key):
+            r.fail("B3", f"审批 scope.{key}={scope.get(key)!r} 与 record {rfm.get(key)!r} 不一致")
+    rec_projects = [x for x in as_list(rfm.get("projects", rfm.get("project"))) if x != "无"]
+    if sorted(as_list(scope.get("projects"))) != sorted(rec_projects):
+        r.fail("B3", "审批 scope.projects 与 record 不一致")
+    if sorted(as_list(scope.get("domains"))) != sorted(as_list(rfm.get("domains"))):
+        r.fail("B3", "审批 scope.domains 与 record 不一致")
+    approved_channel = a.get("release_channel") or scope.get("release_channel")
+    if scope.get("release_channel") != approved_channel:
+        r.fail("B3", "审批 release_channel 与 scope.release_channel 不一致")
+    if approved_channel != rfm.get("release_channel") or approved_channel != manifest.get("release_channel"):
+        r.fail("B3", "审批 release_channel 与 record/manifest 不一致（B 不得扩大发布范围）")
+    return True
 
 
 def check_record(r, assets_repo, manifest, need_ai_form=True):
@@ -258,6 +335,13 @@ def check_record(r, assets_repo, manifest, need_ai_form=True):
         r.fail("B3", "provenance_status 与 record 不一致")
     if rfm.get("provenance_note") != manifest.get("provenance_note"):
         r.fail("B3", "provenance_note 与 record 不一致")
+    expected_type = AI_FORM_TO_ASSET_TYPE.get(rfm.get("ai_form"))
+    if manifest.get("asset_type") != expected_type:
+        r.fail("B3", f"asset_type={manifest.get('asset_type')!r} 与 ai_form={rfm.get('ai_form')!r} "
+                     f"不一致（应为 {expected_type!r}）")
+    if not nonempty_text(rfm.get("ai_form")):
+        r.fail("B3", "record 尚未映射 ai_form（deferred/unmapped），不能生成实现")
+    approved = check_approval(r, assets_repo, manifest, rfm, body, rel, rf)
 
     # 来源指针必须存在、位于资产 repo 内、且 asset_id 对得上
     src = manifest.get("source_record")
@@ -281,7 +365,8 @@ def check_record(r, assets_repo, manifest, need_ai_form=True):
                 r.fail("B3", "source_record_sha256 与当前 record 文件不一致（record 已被修改或 hash 未更新）")
             if manifest.get("source_content_sha256") != record_content_hash(rfm, body):
                 r.fail("B3", "source_content_sha256 与 record 不可变正文不一致（statement/evidence/mapping 被修改）")
-    r.ok(f"B3 record 完整性（{asset_id} approved，字段/范围/来源/hash 一致）")
+    if approved:
+        r.ok(f"B3 record 完整性（{asset_id} approved，审批/字段/范围/来源/hash 一致）")
     return rfm
 
 
@@ -423,17 +508,28 @@ def validate(bdir, assets_repo, release=False):
             if fm is None or "__parse_error__" in fm:
                 r.fail("B4", f"{rel} frontmatter 缺失或 YAML 解析失败（不再降级为警告）")
             else:
-                for key in ("asset_id", "provenance_status", "provenance_note", "release_channel"):
+                for key in ("asset_id", "ai_form", "provenance_status", "provenance_note",
+                            "release_channel", "source_record"):
                     if key not in fm:
                         r.fail("B4", f"{rel} frontmatter 缺 {key}")
+                if not nonempty_text(fm.get("provenance_note")):
+                    r.fail("B4", f"{rel} provenance_note 为空（来源可信度不得丢失）")
                 if fm.get("asset_id") != asset_id:
                     r.fail("B4", f"{rel} frontmatter asset_id={fm.get('asset_id')!r}，应为 {asset_id}")
+                if fm.get("ai_form") != manifest.get("ai_form"):
+                    r.fail("B4", f"{rel} ai_form={fm.get('ai_form')!r}，"
+                                 f"manifest 为 {manifest.get('ai_form')!r}")
+                if "asset_type" in fm and fm.get("asset_type") != manifest.get("asset_type"):
+                    r.fail("B4", f"{rel} asset_type={fm.get('asset_type')!r}，"
+                                 f"manifest 为 {manifest.get('asset_type')!r}")
                 if fm.get("provenance_status") != prov:
                     r.fail("B4", f"{rel} provenance_status={fm.get('provenance_status')!r}，"
                                  f"record/manifest 为 {prov!r}")
                 if fm.get("release_channel") != expected_channel:
                     r.fail("B4", f"{rel} release_channel={fm.get('release_channel')!r}，"
                                  f"manifest 为 {expected_channel!r}")
+                if norm_rel(str(fm.get("source_record", ""))) != norm_rel(str(manifest.get("source_record", ""))):
+                    r.fail("B4", f"{rel} source_record 与 manifest 不一致")
         elif ext == ".py":
             m = re.search(r"^#\s*asset_id:\s*(\S+)", text, re.M)
             if not m:
@@ -489,6 +585,10 @@ def validate(bdir, assets_repo, release=False):
 def check_release_evidence(r, bdir, manifest, afiles, adir, rfm):
     if rfm is None:
         return
+    if manifest.get("release_channel") == "test-only" or manifest.get("provenance_status") == "synthetic":
+        r.fail("B11", "test-only/synthetic 包不得走发布层（--release），只能留在 test-sandbox")
+        return
+    actual_hashes = {norm_rel(os.path.relpath(f, adir)): sha256_file(f) for f in afiles}
     # tests/results.json
     rp = os.path.join(bdir, "tests", "results.json")
     if not os.path.isfile(rp):
@@ -499,20 +599,46 @@ def check_release_evidence(r, bdir, manifest, afiles, adir, rfm):
         except Exception as e:
             r.fail("B11", f"tests/results.json 解析失败: {e}")
             res = {}
+        if res.get("asset_id") != manifest.get("asset_id"):
+            r.fail("B11", f"tests/results.json asset_id={res.get('asset_id')!r} 与 manifest 不一致")
+        if res.get("source_record_sha256") != manifest.get("source_record_sha256"):
+            r.fail("B11", "tests/results.json source_record_sha256 与 manifest 不一致（未绑定本次上游）")
+        if res.get("source_content_sha256") != manifest.get("source_content_sha256"):
+            r.fail("B11", "tests/results.json source_content_sha256 与 manifest 不一致（未绑定本次上游）")
         if res.get("result") != "pass":
             r.fail("B11", f"tests/results.json result={res.get('result')!r}，发布要求 pass")
         cmds = res.get("commands")
         if not isinstance(cmds, list) or not cmds:
             r.fail("B11", "tests/results.json 缺 commands（命令、exit_code 逐项记录）")
         else:
-            bad = [c for c in cmds if not isinstance(c, dict) or c.get("exit_code") != 0]
+            bad = [c for c in cmds if not isinstance(c, dict)
+                   or c.get("exit_code") != 0 or not nonempty_text(c.get("command"))]
             if bad:
-                r.fail("B11", f"tests/results.json 存在非零 exit_code 命令: {bad}")
-        if not nonempty_text(res.get("tested_at")) or not nonempty_text(res.get("tested_by")):
-            r.fail("B11", "tests/results.json 缺 tested_at/tested_by")
-        actual_hashes = {norm_rel(os.path.relpath(f, adir)): sha256_file(f) for f in afiles}
+                r.fail("B11", f"tests/results.json 存在非零/无命令文本的条目: {bad}")
+        if not valid_date(res.get("tested_at")) or not nonempty_text(res.get("tested_by")):
+            r.fail("B11", "tests/results.json 缺有效 tested_at/tested_by")
         if res.get("artifact_sha256") != actual_hashes:
             r.fail("B11", "tests/results.json artifact_sha256 与当前 artifacts 不一致（测试对象已变）")
+        ct = res.get("consumer_test")
+        if not isinstance(ct, dict):
+            r.fail("B11", "tests/results.json 缺 consumer_test（真实消费运行记录）")
+        else:
+            if not nonempty_text(ct.get("command")):
+                r.fail("B11", "consumer_test.command 为空")
+            if ct.get("exit_code") != 0:
+                r.fail("B11", f"consumer_test.exit_code={ct.get('exit_code')!r}，必须为 0")
+            if not valid_date(ct.get("executed_at")):
+                r.fail("B11", "consumer_test.executed_at 不是有效日期")
+            ev = ct.get("evidence_path")
+            if not nonempty_text(ev):
+                r.fail("B11", "consumer_test.evidence_path 为空")
+            else:
+                evp = ev if os.path.isabs(ev) else os.path.join(bdir, ev)
+                if not os.path.isfile(evp):
+                    r.fail("B11", f"consumer_test 证据不存在: {ev}")
+                elif not nonempty_text(ct.get("evidence_sha256")) or \
+                        ct.get("evidence_sha256") != sha256_file(evp):
+                    r.fail("B11", "consumer_test 证据 hash 缺失或与当前文件不一致")
 
     # review.json：独立复核身份与逐项结论
     rv = os.path.join(bdir, "review.json")
@@ -527,20 +653,33 @@ def check_release_evidence(r, bdir, manifest, afiles, adir, rfm):
         for key in ("reviewer", "executor", "decision", "reviewed_at", "checklist"):
             if key not in rev:
                 r.fail("B11", f"review.json 缺 {key}")
+        for key in ("reviewer", "executor"):
+            if not nonempty_text(rev.get(key)):
+                r.fail("B11", f"review.json {key} 为空或占位符")
+        if not valid_date(rev.get("reviewed_at")):
+            r.fail("B11", "review.json reviewed_at 不是有效日期")
         if rev.get("decision") != "approved":
             r.fail("B11", f"review.json decision={rev.get('decision')!r}，发布要求 approved")
         if rev.get("reviewer") and rev.get("reviewer") == rev.get("executor"):
             r.fail("B11", "reviewer 与 executor 相同：独立复核不得由执行者自审")
         if rev.get("independent") is not True:
             r.fail("B11", "review.json 必须显式 independent: true")
+        if rev.get("source_record_sha256") != manifest.get("source_record_sha256") or \
+                rev.get("source_content_sha256") != manifest.get("source_content_sha256"):
+            r.fail("B11", "review.json 未绑定本次 record 文件/正文 hash")
         checklist = rev.get("checklist")
         if not isinstance(checklist, list) or not checklist:
             r.fail("B11", "review.json checklist 为空")
         else:
-            bad = [x for x in checklist if not isinstance(x, dict) or x.get("result") != "pass"]
+            by_id = {x.get("id"): x for x in checklist if isinstance(x, dict)}
+            missing = sorted(REQUIRED_CHECKLIST - set(by_id))
+            if missing:
+                r.fail("B11", f"review.json 缺固定检查项: {missing}")
+            bad = [x for x in checklist if not isinstance(x, dict)
+                   or x.get("result") != "pass" or not nonempty_text(x.get("note"))]
             if bad:
-                r.fail("B11", f"review.json 存在未通过/缺结果的检查项: {bad}")
-        if rev.get("artifact_sha256") != {norm_rel(os.path.relpath(f, adir)): sha256_file(f) for f in afiles}:
+                r.fail("B11", f"review.json 存在未通过/缺结论说明的检查项: {bad}")
+        if rev.get("artifact_sha256") != actual_hashes:
             r.fail("B11", "review.json artifact_sha256 与当前 artifacts 不一致")
 
     # install.md 必须写明范围与回滚
@@ -550,7 +689,7 @@ def check_release_evidence(r, bdir, manifest, afiles, adir, rfm):
     if "回滚" not in itext:
         r.fail("B11", "install.md 缺回滚步骤")
     if not any(x.startswith("B11") for x in r.fails):
-        r.ok("B11 发布证据（tests/results.json / review.json / install 范围与回滚）")
+        r.ok("B11 发布证据（上游 hash 绑定 / 消费运行 / 固定 checklist / install 范围与回滚）")
 
 
 def main():

@@ -17,6 +17,7 @@
 exit 0 = 通过; exit 1 = 失败; exit 2 = 缺少依赖
 """
 import sys, os, re, json, argparse, glob, hashlib, subprocess, shlex
+from pathlib import Path
 
 for _stream in (sys.stdout, sys.stderr):
     if hasattr(_stream, "reconfigure"):
@@ -114,11 +115,9 @@ def list_files(d):
 
 
 def sha256_file(path):
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
+    # Git checkout line endings differ by OS; hash canonical LF bytes.
+    data = Path(path).read_bytes().replace(b"\r\n", b"\n")
+    return hashlib.sha256(data).hexdigest()
 
 
 def record_content_hash(fm, body):

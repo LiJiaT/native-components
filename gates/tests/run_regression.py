@@ -49,7 +49,7 @@ def check(name, cond, detail=""):
 
 
 def sha(path):
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    return hashlib.sha256(Path(path).read_bytes().replace(b"\r\n", b"\n")).hexdigest()
 
 
 def dump_yaml(fm, body):

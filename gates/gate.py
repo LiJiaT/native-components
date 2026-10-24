@@ -730,9 +730,13 @@ def _cmd_external_write(args):
               reason=why, approval=str(_approval_path(key)))
         _emit_external(payload, "allow", f"外部写已有人工预批准（{why}）")
         return
+    if tool:
+        approval_example = f"--tool {tool} --input-json <json>"
+    else:
+        approval_example = '--command "' + command + '"'
     reason = (f"外部写动作被 R3 门禁拒绝（{hit}；{why}）。需人工预批准："
               f"python gates/gate.py approve --by <人> --minutes 30 "
-              f"{'--tool ' + tool + ' --input-json <json>' if tool else '--command \"' + command + '\"'}")
+              f"{approval_example}")
     audit("external-write-deny", tool=tool, command=command, reason=hit, detail=why)
     _emit_external(payload, "deny", reason)
 

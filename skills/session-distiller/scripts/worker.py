@@ -506,6 +506,28 @@ def process_candidates(raw, sid, today):
     return written, invalid, None
 
 
+def finalize_failure(rec, key, err, state, job, snap, remaining):
+    """所有失败分支统一持久化；连续 3 次进入可见 dead-letter。"""
+    rec.update(status="failed", last_error=err, updated_at=time.time())
+    state["jobs"][key] = rec
+    attempts = int(rec.get("attempts", 0))
+    if attempts >= 3:
+        dl = QUEUE / "dead-letter.jsonl"
+        try:
+            with open(dl, "a", encoding="utf-8") as f:
+                f.write(json.dumps({**job, "error": err, "attempts": attempts},
+                                   ensure_ascii=False) + "\n")
+        except Exception as e:
+            log(f"dead-letter write failed {job['session_id'][:8]}: {e}")
+        remaining.discard(key)
+        write_cursor(job, "dead-letter", error=err, snapshot=snap)
+        log(f"dead-letter {job['session_id'][:8]} after {attempts} attempts")
+    else:
+        remaining.add(key)
+        write_cursor(job, "failed", error=err, snapshot=snap)
+    save_state(state)
+
+
 def finalize_jobs(remaining_keys, snapshot_keys):
     """在共享锁内压缩队列：保留未完成/失败/预算保留任务与处理期间新追加的任务。
 
@@ -648,39 +670,22 @@ def main():
             except subprocess.TimeoutExpired:
                 err = f"timeout {args.timeout}s"
                 log(f"error {job['session_id'][:8]}: {err}")
-                rec.update(status="failed", last_error=err, updated_at=time.time())
-                state["jobs"][key] = rec
-                remaining.add(key)
+                finalize_failure(rec, key, err, state, job, snap, remaining)
                 continue
             except Exception as e:
                 err = f"spawn failed: {e}"
                 log(f"error {job['session_id'][:8]}: {err}")
-                rec.update(status="failed", last_error=err, updated_at=time.time())
-                state["jobs"][key] = rec
-                remaining.add(key)
+                finalize_failure(rec, key, err, state, job, snap, remaining)
                 continue
             if proc.returncode != 0:
                 err = (proc.stderr or "").strip()[:500] or f"exit {proc.returncode}"
                 log(f"error {job['session_id'][:8]}: model exit={proc.returncode} {err}")
-                rec.update(status="failed", last_error=err, updated_at=time.time())
-                state["jobs"][key] = rec
-                if rec["attempts"] >= 3:
-                    dl = QUEUE / "dead-letter.jsonl"
-                    with open(dl, "a", encoding="utf-8") as f:
-                        f.write(json.dumps({**job, "error": err, "attempts": rec["attempts"]},
-                                           ensure_ascii=False) + "\n")
-                    log(f"dead-letter {job['session_id'][:8]} after {rec['attempts']} attempts")
-                else:
-                    remaining.add(key)
-                save_state(state)
+                finalize_failure(rec, key, err, state, job, snap, remaining)
                 continue
             cands, perr = parse_model_output(proc.stdout)
             if perr:
                 log(f"error {job['session_id'][:8]}: {perr}")
-                rec.update(status="failed", last_error=perr, updated_at=time.time())
-                state["jobs"][key] = rec
-                remaining.add(key)
-                save_state(state)
+                finalize_failure(rec, key, perr, state, job, snap, remaining)
                 continue
             try:
                 written, invalid, werr = process_candidates(cands, job["session_id"], today)
@@ -689,11 +694,7 @@ def main():
                 written, invalid = [], 0
             if werr:
                 log(f"error {job['session_id'][:8]}: {werr}")
-                rec.update(status="failed", last_error=werr, updated_at=time.time())
-                state["jobs"][key] = rec
-                remaining.add(key)
-                write_cursor(job, "failed", error=werr, snapshot=snap)
-                save_state(state)
+                finalize_failure(rec, key, werr, state, job, snap, remaining)
                 continue
             now_snap = snapshot_file(job)
             if not now_snap or now_snap.get("sha256") != snap.get("sha256"):

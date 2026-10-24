@@ -149,3 +149,29 @@ priority: P2
 - 摘录上限 240 字符，且只取首条匹配错误行；不落完整 tool_result、不落聊天/会议原文。
 - 反馈单与 staging 候选都只保留结论 + 指针；原始 transcript 留在原位。
 - 字段 `r8.raw_logs_written` 恒为 `false`，作为自检标记。
+
+## 8. 处置记录（E06）
+
+反馈进入 owner 受理后，追加 `disposition`，不改变原反馈的六必填字段与脱敏结果：
+
+```json
+"disposition": {
+  "owner": "AI 平台团队/具名人",
+  "received_at": "2026-10-24",
+  "asset_or_component": "EA-… 或组件名/版本",
+  "decision": "accepted | rejected | duplicate | deferred | needs-info",
+  "fix_version": "组件版本或资产 package_version（未修时为空）",
+  "regression_evidence": [{"path": "…", "sha256": "…"}],
+  "approval_ref": "批准记录/评审链接（如进入资产修订）",
+  "status": "open | in-progress | fixed | closed",
+  "closed_at": null,
+  "notes": "理由与后续"
+}
+```
+
+规则：
+
+- `accepted` 必须给出 owner、关联资产/组件与下一步；进入 K/I 修订时必须有批准引用。
+- `fixed` 必须有修复版本与回归证据；不能只写“已处理”。
+- `rejected/duplicate/deferred` 必须写理由；`duplicate` 指向原反馈 ID。
+- 本 skill 只写反馈单与 staging 候选，不自动批准、不自动晋升、不自动外发。

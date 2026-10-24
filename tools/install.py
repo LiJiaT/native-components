@@ -87,7 +87,9 @@ def target_paths(comp, claude_home, project_slug):
             return [(p, base / "hooks" / comp.get("install_dir", name) / p.relative_to(src))
                     for p in iter_files(src)]
         if typ == "flow":
-            return _flow_pairs(src, base / "self-evolve")
+            flow_base = base / ("self-evolve" if name == "self-evolution"
+                               else f"flows/{name}")
+            return _flow_pairs(src, flow_base)
         if typ == "gate":
             pairs = ([(src, base / "gates" / src.name)] if src.is_file()
                      else [(p, base / "gates" / p.relative_to(src)) for p in iter_files(src)])
@@ -116,7 +118,9 @@ def target_paths(comp, claude_home, project_slug):
         base = h / "hooks" / comp.get("install_dir", name)
         return [(p, base / p.relative_to(src)) for p in iter_files(src)]
     if typ == "flow":
-        return _flow_pairs(src, h / "self-evolve")
+        flow_base = h / ("self-evolve" if name == "self-evolution"
+                        else f"flows/{name}")
+        return _flow_pairs(src, flow_base)
     if typ == "gate":
         base = h / "gates"
         pairs = ([(src, base / src.name)] if src.is_file()
@@ -178,8 +182,10 @@ def _backup(dst, backup_root, rel):
     shutil.copy2(dst, backup)
 
 
-def install(comps, claude_home, project_slug, dry, force, allow_test_only):
+def install(comps, claude_home, project_slug, dry, force, allow_test_only,
+            explicit_names=None):
     claude_home = Path(claude_home)
+    explicit_names = set(explicit_names or [])
     stamp = time.strftime("%Y%m%d-%H%M%S")
     txid = f"{stamp}-{os.urandom(4).hex()}"
     backup_root = claude_home / "backups" / txid
@@ -193,23 +199,31 @@ def install(comps, claude_home, project_slug, dry, force, allow_test_only):
         "source_repo": str(REPO),
         "source_commit": git_head(REPO),
         "components": [],
+        "skipped": [],
     }
+    errors = []
     # 先规划全部目标，检测冲突后再落盘
     planned = []
     owner_by_target = {}
     for comp in comps:
         if comp.get("install_target") == "source-only":
+            manifest["skipped"].append({"name": comp["name"], "reason": "source-only"})
             print(f"跳过 source-only 组件: {comp['name']}")
             continue
         if comp["status"] == "test-only" and not allow_test_only:
+            manifest["skipped"].append({"name": comp["name"], "reason": "test-only"})
             print(f"跳过 test-only 组件: {comp['name']}（需 --allow-test-only）")
             continue
         if comp["status"] not in ("active", "experimental", "test-only"):
+            manifest["skipped"].append({"name": comp["name"], "reason": f"status={comp['status']}"})
             print(f"跳过非安装状态组件: {comp['name']} status={comp['status']}")
             continue
         try:
             pairs = target_paths(comp, claude_home, project_slug)
         except SystemExit as e:
+            if comp["name"] in explicit_names and not dry:
+                errors.append(f"{comp['name']}: {e}")
+            manifest["skipped"].append({"name": comp["name"], "reason": str(e)})
             print(f"跳过 {comp['name']}: {e}")
             continue
         entry = {"name": comp["name"], "version": comp["version"], "type": comp["type"],
@@ -226,6 +240,11 @@ def install(comps, claude_home, project_slug, dry, force, allow_test_only):
             entry["hashes"][rel] = sha256(src)
             planned.append((comp, entry, src, dst, rel))
         manifest["components"].append(entry)
+
+    if errors and not dry:
+        raise SystemExit("安装前置检查失败: " + "; ".join(errors))
+    if not dry and not manifest["components"]:
+        raise SystemExit("没有可安装组件；未写入空 manifest，也未覆盖 latest")
 
     for comp, entry, src, dst, rel in planned:
         if dry:
@@ -279,15 +298,19 @@ def install(comps, claude_home, project_slug, dry, force, allow_test_only):
 
     if not dry:
         claude_home.mkdir(parents=True, exist_ok=True)
-        mp = claude_home / f"install-manifest-{txid}.json"
-        body = json.dumps(manifest, ensure_ascii=False, indent=2) + "\n"
-        mp.write_text(body, encoding="utf-8")
-        (claude_home / "install-manifest-latest.json").write_text(body, encoding="utf-8")
         state_path = claude_home / "install-state.json"
         try:
             state = json.load(open(state_path, encoding="utf-8"))
         except Exception:
             state = {"schema_version": "1", "components": {}}
+        manifest["previous_state"] = {
+            entry["name"]: state.get("components", {}).get(entry["name"])
+            for entry in manifest["components"]
+        }
+        mp = claude_home / f"install-manifest-{txid}.json"
+        body = json.dumps(manifest, ensure_ascii=False, indent=2) + "\n"
+        mp.write_text(body, encoding="utf-8")
+        (claude_home / "install-manifest-latest.json").write_text(body, encoding="utf-8")
         state["updated_at"] = manifest["installed_at"]
         state["last_transaction"] = txid
         for entry in manifest["components"]:
@@ -304,7 +327,10 @@ def rollback(manifest_path, claude_home, force=False):
     m = json.load(open(manifest_path, encoding="utf-8"))
     backup_root = Path(m["backup_root"])
     errors, done = [], 0
+    failed_comps, done_by_comp = set(), {}
     for c in m.get("components", []):
+        name = c.get("name", "")
+        comp_done = 0
         for rel in c.get("targets", []):
             dst = Path(claude_home) / rel
             action = (c.get("actions") or {}).get(rel)
@@ -315,37 +341,82 @@ def rollback(manifest_path, claude_home, force=False):
                 if not dst.exists():
                     continue
                 if not force and expected and dst.is_file() and sha256(dst) != expected:
-                    errors.append(f"{rel}: 安装后被修改，拒绝删除（ --force 覆盖）")
+                    errors.append(f"{rel}: 安装后被修改，保留当前文件并拒绝删除（--force 覆盖）")
+                    failed_comps.add(name)
                     continue
                 dst.unlink()
                 done += 1
+                comp_done += 1
                 print(f"删除 {rel}")
             elif action == "replaced":
                 bak = backup_root / rel
                 if not bak.exists():
                     errors.append(f"{rel}: 缺备份，无法恢复")
+                    failed_comps.add(name)
+                    continue
+                if dst.exists() and not force and expected and sha256(dst) != expected:
+                    errors.append(f"{rel}: 安装后被修改，保留当前文件并拒绝覆盖（--force 覆盖）")
+                    failed_comps.add(name)
                     continue
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(bak, dst)
                 done += 1
+                comp_done += 1
                 print(f"恢复 {rel}")
             else:
                 errors.append(f"{rel}: 缺 action，无法安全回滚（旧 manifest 请人工处理）")
+                failed_comps.add(name)
+        done_by_comp[name] = comp_done
     state_path = Path(claude_home) / "install-state.json"
     try:
         state = json.load(open(state_path, encoding="utf-8"))
+        previous = m.get("previous_state")
         for c in m.get("components", []):
-            state.get("components", {}).pop(c.get("name"), None)
+            name = c.get("name")
+            if name in failed_comps:
+                continue
+            if isinstance(previous, dict):
+                if previous.get(name) is None:
+                    state.get("components", {}).pop(name, None)
+                else:
+                    state.setdefault("components", {})[name] = previous[name]
+            elif done_by_comp.get(name, 0) > 0:
+                state.get("components", {}).pop(name, None)
         state["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
         state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n",
                               encoding="utf-8")
-    except Exception:
-        pass
+    except Exception as e:
+        errors.append(f"install-state 恢复失败: {e}")
     print(f"回滚完成（{done} 项）；settings.json 未改动。")
     if errors:
         for e in errors:
             print(f"⚠️  {e}")
         raise SystemExit(1)
+
+
+def expand_dependencies(selected, reg, no_deps=False):
+    """按 registry 递归补齐内部依赖；external:* 只记录不安装。"""
+    if no_deps:
+        return selected, []
+    ordered, seen, missing = [], set(), []
+
+    def add(comp):
+        name = comp["name"]
+        if name in seen:
+            return
+        seen.add(name)
+        for dep in comp.get("dependencies") or []:
+            if str(dep).startswith("external:"):
+                continue
+            if dep not in reg:
+                missing.append(f"{name} -> {dep}")
+            else:
+                add(reg[dep])
+        ordered.append(comp)
+
+    for comp in selected:
+        add(comp)
+    return ordered, missing
 
 
 def main():
@@ -359,6 +430,8 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--allow-test-only", action="store_true")
+    ap.add_argument("--no-deps", action="store_true",
+                    help="不自动补齐 registry 内部依赖（默认补齐）")
     ap.add_argument("--rollback", help="按 install manifest 回滚")
     args = ap.parse_args()
     reg = load_registry()
@@ -370,22 +443,29 @@ def main():
         rollback(args.rollback, args.claude_home, args.force)
         return
     selected = []
+    explicit_names = set()
     if args.all:
         selected = list(reg.values())
     for name in args.component:
         if name not in reg:
             raise SystemExit(f"未知组件: {name}")
         selected.append(reg[name])
+        explicit_names.add(name)
     for typ in args.type:
-        selected += [c for c in reg.values() if c["type"] == typ]
+        typed = [c for c in reg.values() if c["type"] == typ]
+        selected += typed
+        explicit_names |= {c["name"] for c in typed}
     if not selected:
         ap.error("指定 --list / --component / --type / --all / --rollback")
     seen, comps = set(), []
     for c in selected:
         if c["name"] not in seen:
             comps.append(c); seen.add(c["name"])
+    comps, missing = expand_dependencies(comps, reg, args.no_deps)
+    if missing:
+        raise SystemExit("内部依赖缺失: " + "; ".join(missing))
     install(comps, args.claude_home, args.project_slug, args.dry_run, args.force,
-            args.allow_test_only)
+            args.allow_test_only, explicit_names=explicit_names)
 
 
 if __name__ == "__main__":

@@ -297,7 +297,7 @@ def _validate_strict(pkg, errors, base_dir, tasks_dir=None):
     if [d for d in deps if not str(d).startswith("external:")] and not tasks_dir:
         errors.append("存在内部依赖时必须提供 --tasks-dir，以核对依赖任务已完成")
 
-    major_independent = False
+    independent_any = False
     for i, item in enumerate(pkg.get("acceptance_criteria") or []):
         if not isinstance(item, dict):
             continue
@@ -310,12 +310,12 @@ def _validate_strict(pkg, errors, base_dir, tasks_dir=None):
                 kind, detail = parse_check_script(check_script, base_dir)
                 if kind is None:
                     errors.append(f"验收项 {aid}: {detail}")
-        if item.get("independent_review") is not True and item.get("severity") == "blocker":
+        if item.get("independent_review") is True:
+            independent_any = True
+        if item.get("severity") == "blocker" and item.get("independent_review") is not True:
             errors.append(f"验收项 {aid}: blocker 级验收必须 independent_review=true")
-        if item.get("severity") == "major" and item.get("independent_review") is True:
-            major_independent = True
-    if not major_independent:
-        errors.append("至少一项 major 验收必须 independent_review=true（独立复核）")
+    if not independent_any:
+        errors.append("至少一项验收必须 independent_review=true（独立复核）")
 
     ex = pkg.get("execution") or {}
     ex_type = ex.get("type")
@@ -326,10 +326,17 @@ def _validate_strict(pkg, errors, base_dir, tasks_dir=None):
             errors.append("sub-agent 任务的 metadata.task_class 必须是 judgment")
         if model not in MODEL_DEFAULT_ALLOWLIST:
             errors.append(f"execution.model 不在允许清单: {model!r}")
-    else:
+    elif ex_type == "skill":
+        # Skill 是载体，不是执行能力；语义 Skill 允许 judgment 并可用轻模型。
+        if task_class == "judgment" and ex.get("model") not in (None, ""):
+            if ex.get("model") not in MODEL_DEFAULT_ALLOWLIST:
+                errors.append(f"execution.model 不在允许清单: {ex.get('model')!r}")
+        if task_class == "deterministic" and ex.get("model"):
+            errors.append("deterministic skill 不得指定 model（模型路由门禁）")
+    elif ex_type in ("script", "hook"):
         if ex.get("model"):
             errors.append(f"{ex_type} 是确定性执行，不得指定 model（模型路由门禁）")
-        if task_class == "judgment" and ex_type not in ("self",):
+        if task_class != "deterministic":
             errors.append(f"{ex_type} 任务的 metadata.task_class 必须是 deterministic")
 
     if tasks_dir:

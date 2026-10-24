@@ -8,8 +8,13 @@ dependency_status: partial (filelist hook 未实现；规则要求等价人工�
 provenance_note: 摘自《AI 公共规范（v0.7 草案）》revision 5267 的强制规则清单，未逐条对照规范全文核验
 paths:
   - "**/*.v"
+source_record: assets/20261022-1705-ai-public-rules/EA-20261022-02-filelist-sync.md
+release_channel: component-library
+source_artifact: build/EA-20261022-02/artifacts/rule-verilog-filelist-sync.md
+source_artifact_sha256: 72b1cf46dca5031b3a47e2b32ca254004a7f2acfa6f54254124f146a93c4276b
+source_revision: '5267'
+distribution_note: 2026-10-24 owner 批准分发适配：G 允许 hook 未实现时用等价人工/脚本检查；资产语义不变，I 实现仍以 hook 一致性为首选。
 ---
-
 # Verilog 文件变更同步 filelist
 
 ## 规则

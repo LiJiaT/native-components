@@ -5,8 +5,13 @@ asset_id: EA-20261022-03
 ai_form: Rule
 provenance_status: source-excerpt
 provenance_note: 摘自《AI 公共规范（v0.7 草案）》revision 5267 的强制规则清单，未逐条对照规范全文核验
+source_record: assets/20261022-1705-ai-public-rules/EA-20261022-03-no-auto-external-actions.md
+release_channel: component-library
+source_artifact: build/EA-20261022-03/artifacts/rule-no-auto-external-actions.md
+source_artifact_sha256: d137895eaa7ce26cd4306397435b998bf3b464a414ef3befcc777a6556bacb6c
+source_revision: '5267'
+distribution_note: 2026-10-24 owner 批准分发适配：G 补充 gate 预批准与动作后日志说明；资产语义不变，I 实现仍以 R3 完成标准为准。
 ---
-
 # 对外动作必须由人确认后执行
 
 ## 规则

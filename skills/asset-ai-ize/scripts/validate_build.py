@@ -229,6 +229,23 @@ def find_records(assets_repo, asset_id):
     return hits
 
 
+def verify_asset_signature(assets_repo, aid, approval, raw):
+    signers = os.path.join(assets_repo, "approvals", "allowed_signers")
+    if not os.path.isfile(signers):
+        return None
+    sig = os.path.join(assets_repo, "approvals", f"{aid}.sig")
+    if not os.path.isfile(sig):
+        return False
+    try:
+        proc = subprocess.run(
+            ["ssh-keygen", "-Y", "verify", "-f", signers,
+             "-I", str(approval.get("approver", "")), "-n", "asset-approval",
+             "-s", sig], input=raw, capture_output=True, timeout=15)
+        return proc.returncode == 0
+    except Exception:
+        return False
+
+
 def check_approval(r, assets_repo, manifest, rfm, body, rel, record_file):
     aid = manifest.get("asset_id", "")
     apath = os.path.join(assets_repo, "approvals", f"{aid}.json")
@@ -236,11 +253,12 @@ def check_approval(r, assets_repo, manifest, rfm, body, rel, record_file):
         r.fail("B3", f"缺上游审批文件 approvals/{aid}.json；B 不得只凭 record.status=approved 发布")
         return False
     try:
-        a = json.load(open(apath, encoding="utf-8"))
+        raw = open(apath, "rb").read()
+        a = json.loads(raw.decode("utf-8"))
     except Exception as e:
         r.fail("B3", f"审批文件解析失败: {e}")
         return False
-    required = ("asset_id", "proposal_id", "record_path", "record_sha256",
+    required = ("asset_id", "proposal_id", "record_path",
                 "content_sha256", "approver", "approved_at", "decision",
                 "scope", "release_channel")
     missing = [k for k in required if k not in a]
@@ -259,10 +277,14 @@ def check_approval(r, assets_repo, manifest, rfm, body, rel, record_file):
         r.fail("B3", f"审批 approved_at 不是有效日期: {a.get('approved_at')!r}")
     if a.get("decision") != "approved":
         r.fail("B3", f"审批 decision={a.get('decision')!r}，不得消费")
-    if a.get("record_sha256") != sha256_file(record_file):
-        r.fail("B3", "审批 record hash 与当前文件不一致（record 已变更，需重新批准）")
+    if a.get("binding_scope") == "full-file" and \
+            a.get("record_sha256") != sha256_file(record_file):
+        r.fail("B3", "审批显式绑定全文件但 record hash 与当前文件不一致")
     if a.get("content_sha256") != record_content_hash(rfm, body):
         r.fail("B3", "审批正文 hash 与当前 record 不一致")
+    signed = verify_asset_signature(assets_repo, aid, a, raw)
+    if signed is False:
+        r.fail("B3", "审批签名缺失或无效（上游已启用 allowed_signers）")
     scope = a.get("scope") or {}
     for key in ("layer", "ai_form", "owner", "provenance_status"):
         if scope.get(key) != rfm.get(key):
@@ -304,6 +326,12 @@ def check_record(r, assets_repo, manifest, need_ai_form=True):
         return None
     if not re.fullmatch(r"EA-\d{8}-\d{2,}", str(rfm.get("asset_id"))):
         r.fail("B3", f"asset_id 格式非法: {rfm.get('asset_id')}")
+    if rfm.get("form") not in {"知识库", "工程规则", "决策记忆", "技能工作流"}:
+        r.fail("B3", f"record form 非法: {rfm.get('form')!r}")
+    if not valid_date(rfm.get("approved_date")):
+        r.fail("B3", f"record approved_date 不是有效日期: {rfm.get('approved_date')!r}")
+    if rfm.get("ai_form") not in AI_FORMS:
+        r.fail("B3", f"record ai_form 非法或未映射: {rfm.get('ai_form')!r}")
     if rfm.get("provenance_status") not in PROVENANCE:
         r.fail("B3", f"provenance_status 非法: {rfm.get('provenance_status')}")
     if rfm.get("layer") not in LAYERS:
@@ -361,10 +389,9 @@ def check_record(r, assets_repo, manifest, need_ai_form=True):
                 r.fail("B3", f"source_record 不在资产 repo 内: {src}")
             if norm_rel(os.path.relpath(src_abs, assets_repo)) != rel:
                 r.fail("B3", f"source_record 指向 {rel} 之外的文件: {src}")
-            if manifest.get("source_record_sha256") != sha256_file(src_abs):
-                r.fail("B3", "source_record_sha256 与当前 record 文件不一致（record 已被修改或 hash 未更新）")
             if manifest.get("source_content_sha256") != record_content_hash(rfm, body):
-                r.fail("B3", "source_content_sha256 与 record 不可变正文不一致（statement/evidence/mapping 被修改）")
+                r.fail("B3", "source_content_sha256 与 record 不可变正文不一致"
+                             "（statement/evidence/mapping 被修改；implementation 可变）")
     if approved:
         r.ok(f"B3 record 完整性（{asset_id} approved，审批/字段/范围/来源/hash 一致）")
     return rfm
@@ -601,8 +628,6 @@ def check_release_evidence(r, bdir, manifest, afiles, adir, rfm):
             res = {}
         if res.get("asset_id") != manifest.get("asset_id"):
             r.fail("B11", f"tests/results.json asset_id={res.get('asset_id')!r} 与 manifest 不一致")
-        if res.get("source_record_sha256") != manifest.get("source_record_sha256"):
-            r.fail("B11", "tests/results.json source_record_sha256 与 manifest 不一致（未绑定本次上游）")
         if res.get("source_content_sha256") != manifest.get("source_content_sha256"):
             r.fail("B11", "tests/results.json source_content_sha256 与 manifest 不一致（未绑定本次上游）")
         if res.get("result") != "pass":
@@ -625,6 +650,18 @@ def check_release_evidence(r, bdir, manifest, afiles, adir, rfm):
         else:
             if not nonempty_text(ct.get("command")):
                 r.fail("B11", "consumer_test.command 为空")
+            script_rel = ct.get("script_path")
+            if not nonempty_text(script_rel):
+                r.fail("B11", "consumer_test.script_path 为空（未绑定测试程序版本）")
+            else:
+                script = script_rel if os.path.isabs(script_rel) \
+                    else os.path.join(bdir, script_rel)
+                if not os.path.isfile(script):
+                    r.fail("B11", f"consumer_test 脚本不存在: {script_rel}")
+                elif not nonempty_text(ct.get("script_sha256")) or \
+                        ct.get("script_sha256") != sha256_file(script):
+                    r.fail("B11", "consumer_test.script_sha256 与当前测试程序不一致"
+                                 "（测试代码已变，需重新运行）")
             if ct.get("exit_code") != 0:
                 r.fail("B11", f"consumer_test.exit_code={ct.get('exit_code')!r}，必须为 0")
             if not valid_date(ct.get("executed_at")):
@@ -664,9 +701,8 @@ def check_release_evidence(r, bdir, manifest, afiles, adir, rfm):
             r.fail("B11", "reviewer 与 executor 相同：独立复核不得由执行者自审")
         if rev.get("independent") is not True:
             r.fail("B11", "review.json 必须显式 independent: true")
-        if rev.get("source_record_sha256") != manifest.get("source_record_sha256") or \
-                rev.get("source_content_sha256") != manifest.get("source_content_sha256"):
-            r.fail("B11", "review.json 未绑定本次 record 文件/正文 hash")
+        if rev.get("source_content_sha256") != manifest.get("source_content_sha256"):
+            r.fail("B11", "review.json 未绑定本次 record 不可变正文 hash")
         checklist = rev.get("checklist")
         if not isinstance(checklist, list) or not checklist:
             r.fail("B11", "review.json checklist 为空")

@@ -4,7 +4,8 @@
   "title": "acceptance result",
   "type": "object",
   "required": ["task_id", "task_package", "task_package_sha256", "checklist_hash",
-               "criteria", "verdict", "reviewer", "executor", "reviewed_at",
+               "criteria", "verdict", "reviewer", "executor", "reviewer_run_id",
+               "executor_run_id", "reviewer_inputs", "reviewed_at",
                "self_review", "artifact_sha256"],
   "properties": {
     "task_id": {"type": "string", "minLength": 2},
@@ -36,12 +37,41 @@
       "properties": {
         "result": {"enum": ["pass", "fail", "blocked"]},
         "evidence_path": {"type": "string", "minLength": 1},
-        "evidence_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        "evidence_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "severity", "disposition"],
+            "properties": {
+              "id": {"type": "string", "minLength": 1},
+              "severity": {"enum": ["blocker", "major", "minor"]},
+              "disposition": {"enum": ["fixed", "accepted", "rejected", "deferred", "open"]},
+              "reason": {"type": "string"}
+            },
+            "additionalProperties": true
+          }
+        }
       }
     },
     "verdict": {"enum": ["pass", "fail", "blocked"]},
     "reviewer": {"type": "string", "minLength": 2},
     "executor": {"type": "string", "minLength": 2},
+    "reviewer_run_id": {"type": "string", "minLength": 1},
+    "executor_run_id": {"type": "string", "minLength": 1},
+    "reviewer_inputs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["path", "sha256"],
+        "properties": {
+          "path": {"type": "string", "minLength": 1},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        },
+        "additionalProperties": true
+      }
+    },
     "independent": {"type": "boolean"},
     "reviewed_at": {"type": "string", "minLength": 8},
     "artifact_sha256": {"type": "object", "minProperties": 1}

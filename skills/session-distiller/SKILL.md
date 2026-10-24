@@ -95,6 +95,16 @@ scripts/extract.sh <session-id> --level 3 --tool-id <toolu_xxx>
 
 **到此停止，等用户批准。**
 
+### Step 8.5 · 晋升检查（只检查，不自动批准）
+
+对每条拟晋升候选生成 `promotion.json`（schema 见 `schemas/promotion.schema.json`），至少包含：跨 session 证据（≥2）、证据文件 hash、失败模式、owner、scope、目标仓库 commit/clean、`target_path`、`status: proposed`。运行：
+
+```bash
+python gates/gate.py promotion --file promotion.json
+```
+
+检查通过只代表字段/hash/git/范围齐全，不改变人工批准要求；未通过不得进入 Step 9。
+
 ### Step 9 · 写入（用户批准后）
 
 1. 每条批准的候选按 DESIGN.md §6.1 格式写正式产物：

@@ -5,8 +5,13 @@ asset_id: EA-20261022-04
 ai_form: Rule
 provenance_status: source-excerpt
 provenance_note: 摘自《AI 公共规范（v0.7 草案）》revision 5267 的强制规则清单，未逐条对照规范全文核验
+source_record: assets/20261022-1705-ai-public-rules/EA-20261022-04-verify-or-review-before-delivery.md
+release_channel: component-library
+source_artifact: build/EA-20261022-04/artifacts/rule-verify-or-review-before-delivery.md
+source_artifact_sha256: 065bf8691f20948df9443cf9734862e06679c36fb765866482ef08a8a66b3ab2
+source_revision: '5281'
+distribution_note: 正文与实现产物一致；仅补充来源指针与当前 revision。
 ---
-
 # 产出交付前验证或评审
 
 ## 规则

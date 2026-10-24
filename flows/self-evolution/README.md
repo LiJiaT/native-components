@@ -38,7 +38,8 @@ mkdir -p ~/.claude/self-evolve/{queue,staging,distill-state}
 ## 参考实现状态
 
 - 一期（手动蒸馏）与二期（SessionEnd 入队 + 后台 worker + SessionStart 提醒）已在参考环境跑通。
-- 三期 curator、晋升自动化、Q8 准确率验收尚未实现。
+- 三期 curator、晋升自动化、Q8 准确率验收尚未实现；当前维护清单见 [`maintenance.md`](maintenance.md)。
+- 晋升前可用 `python gates/gate.py promotion --file <json>` 做字段/hash/git/范围检查（只检查，不自动批准）。
 - `worker.py` 已接入 `distill-state` 游标（size/mtime/sha256），未变化的会话不重复蒸馏；候选按内容 hash 去重，重复出现累加 `recurrence` 与 `source_sessions`。
 - 模型子进程失败（非零/超时/空输出/非法 JSON）保留任务并记录 stderr；连续 3 次进 `queue/dead-letter.jsonl`。陈旧目录锁按 PID/host/时间恢复。
 - worker 依赖本机 `claude` CLI 与可用模型；模型不可用时任务保留在队列，不影响正常会话。

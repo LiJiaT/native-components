@@ -26,7 +26,7 @@
         "external:pyyaml",
         "external:eng-knowledge-assets"
       ],
-      "version": "1.1.0",
+      "version": "1.2.0",
       "status": "active",
       "path": "skills/asset-ai-ize",
       "install_target": "user-global"
@@ -40,7 +40,7 @@
         "external:pyyaml",
         "external:lark-cli(optional)"
       ],
-      "version": "0.2.0",
+      "version": "0.3.0",
       "status": "active",
       "path": "skills/ai-infra-feedback",
       "install_target": "user-global"
@@ -55,7 +55,7 @@
         "task-packager",
         "external:claude-code"
       ],
-      "version": "1.1.0",
+      "version": "1.2.0",
       "status": "active",
       "path": "skills/orchestrator",
       "install_target": "user-global"
@@ -81,7 +81,7 @@
         "external:claude-cli",
         "external:claude-code-hooks"
       ],
-      "version": "2.1.0",
+      "version": "2.2.0",
       "status": "active",
       "path": "skills/session-distiller",
       "install_target": "user-global"
@@ -141,7 +141,7 @@
         "session-distiller",
         "external:claude-code"
       ],
-      "version": "1.1.0",
+      "version": "1.2.0",
       "status": "active",
       "path": "flows/self-evolution",
       "install_target": "user-global"
@@ -240,7 +240,7 @@
       "dependencies": [
         "external:python3"
       ],
-      "version": "2.1.0",
+      "version": "2.2.0",
       "status": "active",
       "path": "skills/orchestrator/scripts/task_packager.py",
       "install_target": "user-global"
@@ -254,7 +254,7 @@
         "external:pyyaml",
         "external:python3"
       ],
-      "version": "1.1.0",
+      "version": "1.2.0",
       "status": "active",
       "path": "gates/gate.py",
       "install_target": "user-global"
@@ -265,7 +265,7 @@
       "owner": "AI 平台团队",
       "interface": "approved-record / component-registry / acceptance / plan / install-manifest 的 JSON Schema 契约",
       "dependencies": [],
-      "version": "1.1.0",
+      "version": "1.2.0",
       "status": "active",
       "path": "schemas",
       "install_target": "user-global"
@@ -279,7 +279,7 @@
         "component-schemas",
         "external:python3"
       ],
-      "version": "1.1.0",
+      "version": "1.2.0",
       "status": "active",
       "path": "tools/install.py",
       "install_target": "source-only"
@@ -290,7 +290,7 @@
       "owner": "AI 平台团队",
       "interface": "9 领域 slug、公共/领域/项目/个人四层级的落位规则",
       "dependencies": [],
-      "version": "1.0.0",
+      "version": "1.0.1",
       "status": "active",
       "path": "docs/domain-taxonomy.md",
       "install_target": "user-global"
@@ -318,6 +318,70 @@
       "path": "samples/synthetic/dft/hbm3e-stack-level-repair-decision.md",
       "install_target": "test-sandbox",
       "provenance_status": "synthetic"
+    },
+    {
+      "name": "authority-model",
+      "type": "doc",
+      "owner": "AI 平台团队",
+      "interface": "三仓权威源、开发源、公共分发与转换职责说明",
+      "dependencies": [
+        "external:eng-knowledge-assets",
+        "external:eng-asset-ai-components"
+      ],
+      "version": "1.0.0",
+      "status": "active",
+      "path": "docs/authority-model.md",
+      "install_target": "user-global"
+    },
+    {
+      "name": "runtime-support",
+      "type": "doc",
+      "owner": "AI 平台团队",
+      "interface": "当前受测运行时/安装/门禁强制范围矩阵",
+      "dependencies": [],
+      "version": "1.0.0",
+      "status": "active",
+      "path": "docs/runtime-support.md",
+      "install_target": "user-global"
+    },
+    {
+      "name": "pilot-evaluation-template",
+      "type": "doc",
+      "owner": "AI 平台团队",
+      "interface": "真实资产消费试点前后基线与复盘模板",
+      "dependencies": [],
+      "version": "1.0.0",
+      "status": "active",
+      "path": "docs/pilot-evaluation-template.md",
+      "install_target": "user-global"
+    },
+    {
+      "name": "asset-consumption",
+      "type": "flow",
+      "owner": "AI 平台团队",
+      "interface": "资产检索→适用性→版本固定→消费验收→反馈流程",
+      "dependencies": [
+        "docs-domain-taxonomy",
+        "external:eng-knowledge-assets"
+      ],
+      "version": "1.0.0",
+      "status": "active",
+      "path": "flows/asset-consumption",
+      "install_target": "user-global"
+    },
+    {
+      "name": "asset-lifecycle",
+      "type": "flow",
+      "owner": "AI 平台团队",
+      "interface": "资产退役、替代、拆分合并与多消费者台账流程",
+      "dependencies": [
+        "docs-domain-taxonomy",
+        "external:eng-knowledge-assets"
+      ],
+      "version": "1.0.0",
+      "status": "active",
+      "path": "flows/asset-lifecycle",
+      "install_target": "user-global"
     }
   ]
 }

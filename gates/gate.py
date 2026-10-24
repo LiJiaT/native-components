@@ -47,12 +47,21 @@ EXTERNAL_PATTERNS = [
     # git 的全局参数（-C/-c/--git-dir）必须先于子命令识别
     (r"(?i)(?:^|[;&|]\s*|\s)git\b[^;&|\n]*?\s(?:push|remote\s+(?:add|set-url|remove|rename)|"
      r"lfs\s+push)\b", "git 远程写操作"),
-    (r"(?i)\bgh\s+(?:pr|release|repo|issue|gist)\s+(?:create|merge|close|edit|delete|upload|comment)\b",
+    (r"(?i)\bgh\s+(?:pr|release|repo|issue|gist|workflow)\s+"
+     r"(?:create|merge|close|edit|delete|upload|comment|run|dispatch|enable|disable)\b",
      "GitHub 写操作"),
-    (r"(?i)\bnpm\s+publish\b", "npm publish"),
+    (r"(?i)\bgh\s+api\b.*(?:-X\s*(?:POST|PUT|PATCH|DELETE)|--method[= ](?:POST|PUT|PATCH|DELETE)|"
+     r"-f\b|--field\b|--raw-field\b)", "GitHub API 写操作"),
+    (r"(?i)\b(?:npm|pnpm|yarn)\s+publish\b", "npm publish"),
     (r"(?i)\b(?:twine|pip|python\s+-m\s+twine)\s+.*\bupload\b", "包上传"),
-    (r"(?i)\bdocker\s+push\b", "docker push"),
-    (r"(?i)\b(?:scp|rsync)\b.*(?:[:]\S|\s\S+:\S)", "远程复制"),
+    (r"(?i)\b(?:docker|podman)\s+push\b", "容器镜像推送"),
+    (r"(?i)\b(?:gem\s+push|cargo\s+publish|mvn\s+deploy|gradle\s+publish|"
+     r"dotnet\s+nuget\s+push)\b", "包发布"),
+    (r"(?i)\b(?:kubectl|helm|terraform|ansible)\b.*\b(?:apply|create|delete|patch|replace|"
+     r"upgrade|install|uninstall|push)\b", "基础设施写操作"),
+    (r"(?i)\b(?:aws|gcloud|az)\b.*\b(?:create|put|delete|update|copy|sync|upload|deploy|"
+     r"publish|set|modify|rm|cp|mv)\b", "云平台写操作"),
+    (r"(?i)\b(?:scp|rsync|sftp|ftp|telnet|nc|ncat|socat)\b.*(?:[:]\S|\s\S+:\S)", "远程传输"),
     (r"(?i)\bcurl\b.*(?:-X\s*(?:POST|PUT|PATCH|DELETE)|--request\s+(?:POST|PUT|PATCH|DELETE)|"
      r"-d\b|--data(?:-raw|-binary|-urlencode)?\b|-F\b|--form\b|-T\b|--upload-file\b|--json\b)",
      "HTTP 写请求"),
@@ -62,13 +71,39 @@ EXTERNAL_PATTERNS = [
     (r"(?i)\bInvoke-(?:WebRequest|RestMethod)\b.*(?:-(?:Method|Body|InFile)\b)", "HTTP 写请求"),
     (r"(?i)\blark-cli\b.*\b(?:send|create|update|delete|write|upload|move|copy)\b", "飞书写操作"),
     (r"(?i)\bssh\s+\S", "ssh"),
-    (r"(?i)\b(?:python|node|nodejs)\b.*(?:requests\.(?:post|put|patch|delete)|"
-     r"urlopen\s*\([^)]*data\s*=|axios\.(?:post|put|patch|delete)|"
+    (r"(?i)\b(?:python|python3|node|nodejs)\b.*(?:requests\.(?:post|put|patch|delete)|"
+     r"httpx\.(?:post|put|patch|delete|stream)|aiohttp\.|urllib\.request|http\.client|"
+     r"socket\.socket|paramiko|urlopen\s*\([^)]*data\s*=|axios\.(?:post|put|patch|delete)|"
      r"fetch\s*\([^)]*method\s*[:=]\s*['\"](?:POST|PUT|PATCH|DELETE))", "脚本网络写请求"),
+    (r"(?i)\b(?:mail|sendmail|mailx)\b.*(?:-s\b|--subject)", "邮件发送"),
 ]
 MCP_WRITE_RE = re.compile(
-    r"(?i)(?:^|__)(?:push|create|update|delete|merge|close|edit|upload|send|write|comment|"
-    r"publish|release|add|remove|move|copy|install|run)(?:[_-]|$)")
+    r"(?i)(?:^|[_-])(?:push|create|update|delete|merge|close|edit|upload|send|write|comment|"
+    r"publish|release|add|remove|move|copy|install|run|batch|set|permission|grant|revoke|"
+    r"approve|trigger|dispatch|start|stop|kill|rename|chmod|chown|archive|restore|import|"
+    r"export|submit|post|put|patch|attach|detach|assign|unassign|invite|join|leave|lock|"
+    r"unlock|pin|unpin|star|unstar|fork|sync|deploy)(?:[_-]|$)")
+# 只读/本地只读 MCP 能力白名单；未知 MCP 能力默认拒绝。
+MCP_SAFE_TOOLS = {
+    "mcp__github__issue_read", "mcp__github__pull_request_read",
+    "mcp__github__run_secret_scanning", "mcp__web_search__search",
+    "mcp__web_search__fetch",
+    "mcp__plugin_qoder-qmind_qoder-qmind__retrieve",
+    "mcp__plugin_qoder-qmind_qoder-qmind__list_notebooks",
+    "mcp__plugin_qoder-qmind_qoder-qmind__list_sources",
+    "mcp__plugin_qoder-qmind_qoder-qmind__read_source",
+    "mcp__plugin_knowledge-center_repowiki__ListWiki",
+    "mcp__plugin_knowledge-center_repowiki__ReadWiki",
+    "mcp__plugin_knowledge-center_repowiki__list_wiki",
+    "mcp__plugin_knowledge-center_repowiki__read_wiki",
+    "mcp__plugin_knowledge-center_repowiki__list_knowledge",
+    "mcp__plugin_knowledge-center_repowiki__read_knowledge",
+    "mcp__qoder-settings__search_extensions",
+}
+MCP_SAFE_RE = re.compile(
+    r"(?i)^(?:get|list|search|query|read|fetch|view|show|describe|status|help|retrieve|"
+    r"take_screenshot|take_snapshot|navigate_page|wait_for|select_page|hover|evaluate_script|"
+    r"download_storage_file|list_pages|list_console_messages|list_network_requests)(?:_|$)")
 EXTERNAL_READ_TOOLS = {"Read", "Grep", "Glob", "Bash", "Shell", "shell", "run_terminal_cmd"}
 SECRET_PATTERNS = [
     re.compile(r"\b(ghp|gho|ghu|ghs|ghr|github_pat)_[A-Za-z0-9_]{16,}"),
@@ -84,6 +119,7 @@ RAW_PATTERNS = [
     re.compile(r"^\s*(?:Speaker\s*[A-Z0-9]+|说话人\s*[A-Z0-9一二三四五六七八九十]+)\s*[:：]", re.I),
 ]
 AI_FORMS = {"Memory", "Rule", "Skill", "Workflow", "Hook", "Prompt"}
+FORMS = {"知识库", "工程规则", "决策记忆", "技能工作流"}
 LAYERS = {"个人级", "项目级", "领域级", "公共级"}
 PROVENANCE = {"verified", "source-excerpt", "synthetic"}
 STATUSES = {"approved", "deprecated", "superseded", "withdrawn"}
@@ -91,15 +127,64 @@ LIFECYCLE = {"pending", "implemented", "installed", "withdrawn", "superseded"}
 COMPONENT_TYPES = {"skill", "agent", "hook", "flow", "rule", "memory", "prompt",
                    "gate", "schema", "tool", "doc"}
 COMPONENT_STATUS = {"active", "experimental", "test-only", "deprecated", "withdrawn"}
+PUBLIC_ENTRY_GLOBS = ("rules/*.md", "skills/*/SKILL.md", "agents/*.md",
+                      "flows/*/README.md")
 
 
-def audit(event, **fields):
+_AUDIT_CTX = {}
+_DENY_COUNTS = Path(os.environ.get(
+    "AI_GATE_DENY_COUNTS", str(AUDIT_LOG.parent / "deny-counts.json")))
+
+
+def set_audit_context(**fields):
+    _AUDIT_CTX.clear()
+    _AUDIT_CTX.update({k: v for k, v in fields.items() if v not in (None, "")})
+
+
+def audit(event, required=False, **fields):
+    """写入结构化审计；返回是否成功。安全关键门禁应传 required=True。"""
     try:
         AUDIT_LOG.parent.mkdir(parents=True, exist_ok=True)
+        decision = ("allow" if event.endswith(("allow", "pass"))
+                    else "deny" if event.endswith(("deny", "fail")) else "")
         rec = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "pid": os.getpid(),
-               "event": event, **fields}
+               "session_id": os.environ.get("AI_GATE_SESSION_ID", ""),
+               "rule": "", "input_hash": "", "decision": decision,
+               **_AUDIT_CTX, "event": event, **fields}
         with open(AUDIT_LOG, "a", encoding="utf-8") as f:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        return True
+    except Exception as e:
+        if required:
+            print(f"⚠️ 审计日志写入失败: {e}", file=sys.stderr)
+        return False
+
+
+def _bump_deny_count(key):
+    try:
+        _DENY_COUNTS.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            data = json.loads(_DENY_COUNTS.read_text(encoding="utf-8"))
+        except Exception:
+            data = {}
+        item = data.get(key) or {"count": 0}
+        item["count"] = int(item.get("count", 0)) + 1
+        item["updated_at"] = time.time()
+        data[key] = item
+        _DENY_COUNTS.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+                                encoding="utf-8")
+        return item["count"]
+    except Exception:
+        return 1
+
+
+def _clear_deny_count(key):
+    try:
+        data = json.loads(_DENY_COUNTS.read_text(encoding="utf-8"))
+        if key in data:
+            data.pop(key, None)
+            _DENY_COUNTS.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+                                    encoding="utf-8")
     except Exception:
         pass
 
@@ -112,7 +197,10 @@ def die(msg, code=1):
 
 def ok(msg):
     print(f"✅ {msg}")
-    audit("pass", message=msg)
+    required = bool(_AUDIT_CTX.get("require_audit"))
+    if not audit("pass", required=required, message=msg) and required:
+        print("❌ 安全关键门禁无法写审计日志，按失败关闭退出", file=sys.stderr)
+        sys.exit(1)
 
 
 def split_frontmatter(text):
@@ -270,7 +358,24 @@ def approval_path(assets_repo, asset_id):
     return Path(assets_repo) / "approvals" / f"{asset_id}.json"
 
 
-def verify_record(assets_repo, asset_id):
+def _verify_asset_signature(assets_repo, asset_id, approval, raw):
+    signers = Path(assets_repo) / "approvals" / "allowed_signers"
+    if not signers.is_file():
+        return None
+    sig = Path(assets_repo) / "approvals" / f"{asset_id}.sig"
+    if not sig.is_file():
+        return False
+    try:
+        r = subprocess.run(
+            ["ssh-keygen", "-Y", "verify", "-f", str(signers),
+             "-I", str(approval.get("approver", "")), "-n", "asset-approval",
+             "-s", str(sig)], input=raw, capture_output=True, timeout=15)
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
+def verify_record(assets_repo, asset_id, require_distributable=False):
     hits = find_record(assets_repo, asset_id)
     if len(hits) != 1:
         die(f"{asset_id}: record 命中 {len(hits)} 条，必须唯一")
@@ -287,28 +392,45 @@ def verify_record(assets_repo, asset_id):
             die(f"{asset_id}: {k} 为空或占位符")
     if fm.get("layer") not in LAYERS:
         die(f"{asset_id}: layer 非法")
-    if fm.get("ai_form") not in AI_FORMS:
+    if fm.get("form") not in FORMS:
+        die(f"{asset_id}: form 非法 {fm.get('form')!r}")
+    if not valid_date(fm.get("approved_date")):
+        die(f"{asset_id}: approved_date 不是有效日期")
+    if fm.get("ai_form") is None:
+        if fm.get("mapping_status") not in ("unmapped", "deferred"):
+            die(f"{asset_id}: ai_form 为空时必须声明 mapping_status=unmapped|deferred")
+        if not nonempty(fm.get("mapping_reason")):
+            die(f"{asset_id}: ai_form 未映射时必须给出非空 mapping_reason")
+    elif fm.get("ai_form") not in AI_FORMS:
         die(f"{asset_id}: ai_form 非法")
     if fm.get("provenance_status") not in PROVENANCE:
         die(f"{asset_id}: provenance_status 非法")
     if fm.get("status") not in STATUSES:
         die(f"{asset_id}: status 非法 {fm.get('status')!r}")
-    if fm.get("status") != "approved":
-        die(f"{asset_id}: status={fm.get('status')}，不可分发")
+    if require_distributable and fm.get("status") != "approved":
+        die(f"{asset_id}: status={fm.get('status')}，不可新分发")
+    if require_distributable and fm.get("ai_form") not in AI_FORMS:
+        die(f"{asset_id}: 未映射 ai_form，不可新分发")
+    if require_distributable and str(fm.get("release_channel")) == "test-only":
+        die(f"{asset_id}: test-only 资产不可进入生产分发")
     projects = [x for x in as_list(fm.get("projects", fm.get("project"))) if x != "无"]
     if fm.get("layer") == "项目级" and len(projects) != 1:
         die(f"{asset_id}: 项目级必须且只能有一个项目")
     if len(projects) > 1 and fm.get("layer") not in ("领域级", "公共级"):
         die(f"{asset_id}: 多项目资产只能领域级/公共级")
+    impl = fm.get("implementation") or {}
+    if fm.get("status") == "withdrawn" and impl.get("status") == "installed":
+        die(f"{asset_id}: record 已 withdrawn 但 implementation 仍 installed")
 
     ap = approval_path(assets_repo, asset_id)
     if not ap.is_file():
         die(f"{asset_id}: 缺审批绑定文件 {ap}")
     try:
-        approval = json.load(open(ap, encoding="utf-8"))
+        raw = ap.read_bytes()
+        approval = json.loads(raw.decode("utf-8"))
     except Exception as e:
         die(f"{asset_id}: 审批文件解析失败 {e}")
-    for k in ("asset_id", "approver", "approved_at", "decision", "record_sha256",
+    for k in ("asset_id", "approver", "approved_at", "decision",
               "content_sha256", "scope"):
         if k not in approval:
             die(f"{asset_id}: 审批文件缺 {k}")
@@ -316,10 +438,14 @@ def verify_record(assets_repo, asset_id):
         die(f"{asset_id}: 审批 decision={approval.get('decision')!r}")
     if approval.get("asset_id") != asset_id:
         die(f"{asset_id}: 审批文件 asset_id 不符")
-    if approval.get("record_sha256") != sha256_file(path):
-        die(f"{asset_id}: record 文件 hash 与审批绑定不一致（内容已变更，需重新审批）")
+    if approval.get("binding_scope") == "full-file" and \
+            approval.get("record_sha256") != sha256_file(path):
+        die(f"{asset_id}: 审批显式绑定全文件但 record hash 不一致")
     if approval.get("content_sha256") != record_content_hash(fm, body):
         die(f"{asset_id}: record 正文/映射 hash 与审批绑定不一致")
+    signed = _verify_asset_signature(assets_repo, asset_id, approval, raw)
+    if signed is False:
+        die(f"{asset_id}: 审批签名缺失或无效")
     scope = approval.get("scope") or {}
     for k in ("layer", "ai_form", "owner", "provenance_status"):
         if scope.get(k) != fm.get(k):
@@ -334,12 +460,15 @@ def verify_record(assets_repo, asset_id):
 # ---------------------------------------------------------------- subcommands
 
 def cmd_record(args):
-    path, fm, body, approval = verify_record(args.assets_repo, args.asset_id)
+    set_audit_context(rule="asset-record", input_hash=args.asset_id, require_audit=True)
+    path, fm, body, approval = verify_record(
+        args.assets_repo, args.asset_id, getattr(args, "require_distributable", False))
     ok(f"record {args.asset_id} 完整且审批绑定当前内容（{path.name}）")
 
 
 def cmd_asset_registry(args):
     repo = Path(args.assets_repo)
+    set_audit_context(rule="asset-registry", input_hash=str(repo), require_audit=True)
     reg = json.load(open(repo / "registry.json", encoding="utf-8"))
     entries = reg.get("assets")
     if not isinstance(entries, list):
@@ -352,19 +481,32 @@ def cmd_asset_registry(args):
     for e in entries:
         aid = e.get("asset_id")
         try:
-            path, fm, body, approval = verify_record(repo, aid)
+            path, fm, body, approval = verify_record(
+                repo, aid, getattr(args, "require_distributable", False))
         except SystemExit:
             errors.append(aid)
             continue
-        for key in ("proposal_id", "title", "layer", "ai_form", "owner",
-                    "provenance_status"):
+        for key in ("proposal_id", "title", "form", "layer", "ai_form", "owner",
+                    "status", "approved_by", "approved_date", "provenance_status",
+                    "provenance_note", "release_channel"):
             if e.get(key) != fm.get(key):
                 errors.append(f"{aid}.{key}")
+        if sorted(as_list(e.get("domains"))) != sorted(as_list(fm.get("domains"))):
+            errors.append(f"{aid}.domains")
+        rec_projects = sorted(x for x in as_list(fm.get("projects", fm.get("project")))
+                              if x != "无")
+        if sorted(x for x in as_list(e.get("projects", e.get("project"))) if x != "无") \
+                != rec_projects:
+            errors.append(f"{aid}.projects")
         if e.get("path") != str(path.relative_to(repo)).replace("\\", "/"):
             errors.append(f"{aid}.path")
         impl = e.get("implementation") or {}
+        rec_impl = fm.get("implementation") or {}
         if impl.get("status") and impl["status"] not in LIFECYCLE:
             errors.append(f"{aid}.implementation.status")
+        for key in ("status", "package", "ai_infra_repo", "installed", "installed_by"):
+            if impl.get(key) != rec_impl.get(key):
+                errors.append(f"{aid}.implementation.{key}")
         if impl.get("status") == "withdrawn" and impl.get("installed"):
             errors.append(f"{aid}: withdrawn 但仍有 installed 日期")
         if fm.get("provenance_status") == "synthetic":
@@ -378,6 +520,7 @@ def cmd_asset_registry(args):
 
 
 def cmd_component_registry(args):
+    set_audit_context(rule="component-registry", input_hash=str(args.repo), require_audit=True)
     repo = Path(args.repo)
     if not (repo / "registry.json").is_file():
         installed = Path(__file__).resolve().parent / "registry.json"
@@ -454,12 +597,46 @@ def cmd_component_registry(args):
 
     for n in graph:
         visit(n, [])
+    registered = []
+    for c in comps:
+        if isinstance(c, dict) and c.get("path"):
+            registered.append((path_repo / c["path"]).resolve())
+    for pattern in PUBLIC_ENTRY_GLOBS:
+        for entry in path_repo.glob(pattern):
+            if not entry.is_file() or entry.name.startswith(".") or entry.name == "README.md":
+                continue
+            resolved = entry.resolve()
+            if not any(resolved == r or r in resolved.parents for r in registered):
+                errors.append(f"公共入口未登记 registry: "
+                              f"{entry.relative_to(path_repo).as_posix()}")
     if errors:
         die(f"component registry 失败: {errors}")
-    ok(f"component registry 一致（{len(comps)} 个组件，七字段/依赖/路径通过）")
+    ok(f"component registry 一致（{len(comps)} 个组件，七字段/依赖/路径/公共入口覆盖通过）")
+
+
+def _validate_acceptance_items(items):
+    ids = []
+    for i, item in enumerate(items or []):
+        if isinstance(item, str):
+            if is_placeholder(item):
+                die(f"计划 acceptance[{i}] 是占位字符串")
+            continue
+        if not isinstance(item, dict):
+            die(f"计划 acceptance[{i}] 必须是字符串或对象")
+        for key in ("id", "expected", "check_method", "evidence"):
+            if not nonempty(item.get(key)):
+                die(f"计划 acceptance[{i}] 缺非空 {key}")
+        if item.get("check_method") not in ("manual", "auto"):
+            die(f"计划 acceptance[{i}].check_method 非法")
+        if item.get("check_method") == "auto" and not nonempty(item.get("check_script")):
+            die(f"计划 acceptance[{i}] auto 必须给 check_script")
+        ids.append(item["id"])
+    if len(ids) != len(set(ids)):
+        die("计划 acceptance id 重复")
 
 
 def cmd_plan(args):
+    set_audit_context(rule="plan", input_hash=sha256_raw(Path(args.file)), require_audit=True)
     try:
         p = json.load(open(args.file, encoding="utf-8"))
     except Exception as e:
@@ -467,13 +644,24 @@ def cmd_plan(args):
     if not isinstance(p, dict):
         die("计划必须是 JSON 对象")
     check_schema("plan.schema.json", p, "计划")
-    for k in ("constraints", "inputs", "outputs", "boundaries", "acceptance", "human_gates"):
+    for k in ("constraints", "inputs", "outputs", "boundaries", "human_gates"):
         if not nonempty_items(p.get(k)):
             die(f"计划 {k} 必须是非空列表且每项为非占位字符串")
+    _validate_acceptance_items(p.get("acceptance"))
     if not nonempty(p.get("goal")):
         die("计划 goal 为空")
     if not nonempty(p.get("version")):
         die("计划 version 为空")
+    rc = p.get("requirement_card") or {}
+    rc_path = _resolve(Path(args.file).resolve().parent, rc.get("path", ""))
+    if not rc_path.is_file():
+        die(f"需求卡不存在: {rc_path}")
+    if rc.get("sha256") != sha256_raw(rc_path):
+        die("需求卡 hash 与 requirement_card.sha256 不一致")
+    acc_hash = hashlib.sha256(json.dumps(
+        p.get("acceptance"), sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
+    if p.get("acceptance_criteria_hash") != acc_hash:
+        die("acceptance_criteria_hash 与当前验收标准不一致")
     base = {k: v for k, v in p.items() if k not in ("approval", "plan_hash")}
     digest = hashlib.sha256(json.dumps(base, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
     if p.get("plan_hash") not in (None, "") and p.get("plan_hash") != digest:
@@ -508,14 +696,43 @@ def _check_file_hash(path, expected, label):
         die(f"{label} 证据 hash 与记录不一致（文件已变更）")
 
 
+def _concrete_path(value):
+    if not nonempty(value) or "<" in str(value) or "回复" in str(value):
+        return ""
+    text = str(value).strip()
+    name = Path(text).name
+    return text if ("/" in text or "\\" in text or "." in name) else ""
+
+
+def _required_artifacts(task):
+    oc = task.get("output_contract") or {}
+    out = []
+    for key in ("required_artifacts", "artifacts"):
+        val = oc.get(key)
+        if isinstance(val, list):
+            for item in val:
+                path = item.get("path") if isinstance(item, dict) else item
+                p = _concrete_path(path)
+                if p:
+                    out.append(p)
+    primary = oc.get("primary") or {}
+    for key in ("path", "location"):
+        p = _concrete_path(primary.get(key))
+        if p:
+            out.append(p)
+    return sorted(set(out))
+
+
 def cmd_acceptance(args):
+    set_audit_context(rule="acceptance", input_hash=sha256_raw(Path(args.file)), require_audit=True)
     try:
         d = json.load(open(args.file, encoding="utf-8"))
     except Exception as e:
         die(f"acceptance 解析失败: {e}")
     check_schema("acceptance.schema.json", d, "acceptance")
     base = Path(args.base_dir or Path(args.file).resolve().parent)
-    for k in ("task_id", "reviewer", "executor", "reviewed_at"):
+    for k in ("task_id", "reviewer", "executor", "reviewer_run_id",
+              "executor_run_id", "reviewed_at"):
         if not nonempty(d.get(k)):
             die(f"acceptance.{k} 为空或占位符")
     if not valid_date(d.get("reviewed_at")):
@@ -524,6 +741,8 @@ def cmd_acceptance(args):
         die("acceptance 必须 independent: true")
     if d.get("reviewer") == d.get("executor"):
         die("reviewer 与 executor 相同，不是独立复核")
+    if d.get("reviewer_run_id") == d.get("executor_run_id"):
+        die("reviewer_run_id 与 executor_run_id 相同，不是独立运行")
 
     # 任务包绑定：AC 集合、命令与契约必须来自原任务包
     tp_rel = d.get("task_package")
@@ -555,6 +774,30 @@ def cmd_acceptance(args):
     if d.get("checklist_hash") != expected_checklist:
         die("acceptance.checklist_hash 与任务包验收清单不一致")
 
+    required_artifacts = _required_artifacts(task)
+    art = d.get("artifact_sha256")
+    if not isinstance(art, dict) or not art:
+        die("acceptance 缺 artifact_sha256（产物版本绑定）")
+    art_norm = {str(Path(k)).replace("\\", "/"): k for k in art}
+    missing_art = [p for p in required_artifacts
+                   if str(Path(p)).replace("\\", "/") not in art_norm]
+    if missing_art:
+        die(f"acceptance 缺少任务包必交付产物: {missing_art}")
+
+    reviewer_inputs = d.get("reviewer_inputs")
+    if not isinstance(reviewer_inputs, list) or not reviewer_inputs:
+        die("acceptance 缺 reviewer_inputs（复核输入清单）")
+    review_paths = set()
+    for item in reviewer_inputs:
+        path = _resolve(base, item["path"])
+        _check_file_hash(path, item["sha256"], f"复核输入 {item['path']}")
+        review_paths.add(str(path.resolve()))
+    if str(tp_path.resolve()) not in review_paths:
+        die("reviewer_inputs 未包含任务包（复核未绑定原任务契约）")
+    for rel in art:
+        if str(_resolve(base, rel).resolve()) not in review_paths:
+            die(f"reviewer_inputs 未包含产物 {rel}（复核输入不完整）")
+
     for c in crit:
         for k in ("expected", "evidence_path", "result", "evidence_sha256"):
             if not c.get(k):
@@ -566,10 +809,19 @@ def cmd_acceptance(args):
             die(f"验收项 {c.get('id')} expected 与任务包不一致")
         if c.get("check_method") != tc.get("check_method"):
             die(f"验收项 {c.get('id')} check_method 与任务包不一致")
+        task_evidence = _concrete_path(tc.get("evidence_path"))
+        if task_evidence and (str(Path(c["evidence_path"])).replace("\\", "/")
+                              != str(Path(task_evidence)).replace("\\", "/")):
+            die(f"验收项 {c.get('id')} evidence_path 与任务包指定证据不一致")
         ev = _resolve(base, c["evidence_path"])
         if ev.is_dir():
             die(f"验收项 {c.get('id')} evidence_path 不能是目录")
         _check_file_hash(ev, c["evidence_sha256"], f"验收项 {c.get('id')}")
+        if str(ev.resolve()) not in review_paths:
+            die(f"reviewer_inputs 未包含验收项 {c.get('id')} 的证据")
+
+    for rel, expected in art.items():
+        _check_file_hash(_resolve(base, rel), expected, f"产物 {rel}")
 
     self_review = d.get("self_review")
     if not isinstance(self_review, dict) or self_review.get("result") != "pass":
@@ -580,12 +832,15 @@ def cmd_acceptance(args):
     if self_path.is_dir():
         die("self_review evidence_path 不能是目录")
     _check_file_hash(self_path, self_review["evidence_sha256"], "self_review")
-
-    art = d.get("artifact_sha256")
-    if not isinstance(art, dict) or not art:
-        die("acceptance 缺 artifact_sha256（产物版本绑定）")
-    for rel, expected in art.items():
-        _check_file_hash(_resolve(base, rel), expected, f"产物 {rel}")
+    if str(self_path.resolve()) not in review_paths:
+        die("reviewer_inputs 未包含自查记录")
+    for finding in self_review.get("findings") or []:
+        fid = finding.get("id", "?")
+        if finding.get("disposition") in (None, "", "open"):
+            die(f"自查 finding {fid} 未处置（disposition=open/缺失）")
+        if finding.get("disposition") in ("rejected", "deferred") and \
+                not nonempty(finding.get("reason")):
+            die(f"自查 finding {fid} disposition={finding.get('disposition')} 但缺 reason")
 
     recomputed = ("fail" if any(c["result"] == "fail" for c in crit)
                   else "blocked" if any(c["result"] == "blocked" for c in crit) else "pass")
@@ -612,16 +867,26 @@ def _approval_path(key):
     return APPROVAL_DIR / f"{digest}.json"
 
 
+def _signature_policy():
+    """返回 (required, signers_path, error)。显式配置即视为严格模式。"""
+    explicit = os.environ.get("AI_GATE_ALLOWED_SIGNERS", "").strip()
+    flag = os.environ.get("AI_GATE_REQUIRE_SIGNATURE", "").strip().lower()
+    required = flag in ("1", "true", "yes", "required") or bool(explicit)
+    signers = Path(explicit) if explicit else APPROVAL_DIR / "allowed_signers"
+    if required and not signers.is_file():
+        return True, signers, f"严格签名策略已启用但 allowed_signers 不存在: {signers}"
+    return required, signers, ""
+
+
 def _allowed_signers():
-    return Path(os.environ.get("AI_GATE_ALLOWED_SIGNERS",
-                               str(APPROVAL_DIR / "allowed_signers")))
+    return _signature_policy()[1]
 
 
 def _verify_signature(ap_path, approval, raw):
-    """返回 True/False；未配置 allowed_signers 时返回 None（兼容模式）。"""
-    signers = _allowed_signers()
+    """返回 True/False/None；严格模式缺策略/签名一律 False。"""
+    required, signers, _ = _signature_policy()
     if not signers.is_file():
-        return None
+        return False if required else None
     sig = ap_path.with_suffix(".sig")
     if not sig.is_file():
         return False
@@ -639,6 +904,9 @@ def _verify_signature(ap_path, approval, raw):
 def _approval_valid(key, ap_path):
     if not ap_path.is_file():
         return False, "缺少批准文件"
+    required, signers, policy_error = _signature_policy()
+    if policy_error:
+        return False, policy_error
     try:
         raw = ap_path.read_bytes()
         a = json.loads(raw.decode("utf-8"))
@@ -651,6 +919,8 @@ def _approval_valid(key, ap_path):
         else:
             exp_ok = float(expires or 0) >= time.time()
         signed = _verify_signature(ap_path, a, raw)
+        if required and (signed is not True or a.get("approval_method") != "ssh-signature"):
+            return False, "严格签名模式要求有效 SSH 签名批准"
         ok = (key_ok and exp_ok and nonempty(a.get("approved_by"))
               and a.get("decision", "approved") == "approved"
               and signed is not False)
@@ -687,13 +957,40 @@ def cmd_external_write(args):
         return
 
 
+def _mcp_is_safe(tool):
+    return tool in MCP_SAFE_TOOLS or bool(MCP_SAFE_RE.match(tool.rsplit("__", 1)[-1]))
+
+
+def _deny_external(payload, tool, command, key, hit, why, rule="R3/external-write"):
+    input_hash = hashlib.sha256(key.encode("utf-8")).hexdigest()
+    session = os.environ.get("AI_GATE_SESSION_ID", "")
+    set_audit_context(rule=rule, input_hash=input_hash, session_id=session)
+    count = _bump_deny_count(f"{rule}|{session}|{input_hash}")
+    escalation = count >= 3
+    if tool:
+        approval_example = f"--tool {tool} --input-json <json>"
+    else:
+        approval_example = '--command "' + command + '"'
+    reason = (f"外部写动作被 R3 门禁拒绝（{hit}；{why}）。需人工预批准："
+              f"python gates/gate.py approve --by <人> --minutes 30 "
+              f"{approval_example}")
+    if escalation:
+        reason += f"。同一输入已连续拒绝 {count} 次，升级人工审批并停止重试"
+    audit("external-write-deny", required=True, tool=tool, command=command,
+          reason=hit, detail=why, deny_count=count, escalated=escalation)
+    _emit_external(payload, "deny", reason)
+
+
 def _cmd_external_write(args):
     payload = {}
     command = ""
     tool = ""
     tool_input = {}
     if args.command:
-        command = args.command
+        command = args.command.strip()
+        if not command:
+            _deny_external({}, "", "", "", "命令为空", "缺少可判定的命令文本")
+            return
         hit = next((label for pat, label in EXTERNAL_PATTERNS if re.search(pat, command)), None)
         key = _approval_key(command=command)
     else:
@@ -702,43 +999,72 @@ def _cmd_external_write(args):
             payload = json.loads(raw) if raw else {}
         except Exception as e:
             reason = f"PreToolUse 输入不是合法 JSON，按失败关闭拒绝: {e}"
-            audit("external-write-deny", reason=reason)
+            audit("external-write-deny", required=True, reason=reason)
             _emit_external({"_": True}, "deny", reason)
             return
-        tool = str(payload.get("tool_name", ""))
-        tool_input = payload.get("tool_input") or {}
+        if not isinstance(payload, dict):
+            _deny_external({}, "", "", "", "事件形状非法", "PreToolUse 输入不是 JSON 对象")
+            return
+        tool = str(payload.get("tool_name", "")).strip()
+        tool_input = payload.get("tool_input")
+        if not tool:
+            _deny_external(payload, "", "", "", "事件形状非法", "缺少 tool_name，无法判定外部写")
+            return
+        if not isinstance(tool_input, dict):
+            _deny_external(payload, tool, "", "", "事件形状非法", "tool_input 不是对象")
+            return
         if tool.startswith("mcp__") or tool.startswith("mcp_"):
-            short = tool.split("__", 2)[-1] if "__" in tool else tool
-            hit = f"MCP 写操作 {tool}" if MCP_WRITE_RE.search(short) else None
             key = _approval_key(tool=tool, tool_input=tool_input)
+            if _mcp_is_safe(tool):
+                set_audit_context(rule="R3/external-write",
+                                  input_hash=hashlib.sha256(key.encode()).hexdigest())
+                if not audit("external-write-allow", required=True, tool=tool,
+                             reason="MCP 只读白名单"):
+                    _deny_external(payload, tool, "", key, "审计不可写", "审计失败关闭")
+                    return
+                _clear_deny_count(f"R3/external-write|{os.environ.get('AI_GATE_SESSION_ID','')}|"
+                                  f"{hashlib.sha256(key.encode()).hexdigest()}")
+                _emit_external(payload, "allow", f"MCP 只读能力: {tool}")
+                return
+            if MCP_WRITE_RE.search(tool.rsplit("__", 1)[-1]):
+                hit = f"MCP 写操作 {tool}"
+            else:
+                _deny_external(payload, tool, "", key, "未知 MCP 能力",
+                               "未在只读白名单内，默认拒绝")
+                return
         elif tool in ("Bash", "Shell", "shell", "run_terminal_cmd"):
-            command = str(tool_input.get("command", ""))
+            command = str(tool_input.get("command", "")).strip()
+            if not command:
+                _deny_external(payload, tool, "", "", "命令为空", "shell 事件缺少 command")
+                return
             hit = next((label for pat, label in EXTERNAL_PATTERNS if re.search(pat, command)), None)
             key = _approval_key(command=command)
         else:
             audit("external-write-allow", tool=tool, reason="非 shell/MCP 工具")
             _emit_external(payload, "allow", f"非外部写工具: {tool}")
             return
-    label = command or key
+    input_hash = hashlib.sha256(key.encode("utf-8")).hexdigest()
+    set_audit_context(rule="R3/external-write", input_hash=input_hash)
     if not hit:
-        audit("external-write-allow", tool=tool, command=command, reason="未命中外部写模式")
+        if not audit("external-write-allow", required=True, tool=tool, command=command,
+                     reason="未命中外部写模式"):
+            _deny_external(payload, tool, command, key, "审计不可写", "审计失败关闭")
+            return
+        _clear_deny_count(f"R3/external-write|{os.environ.get('AI_GATE_SESSION_ID','')}|"
+                          f"{input_hash}")
         _emit_external(payload, "allow", "未命中外部写模式")
         return
     approved, why = _approval_valid(key, _approval_path(key))
     if approved:
-        audit("external-write-allow", tool=tool, command=command,
-              reason=why, approval=str(_approval_path(key)))
+        if not audit("external-write-allow", required=True, tool=tool, command=command,
+                     reason=why, approval=str(_approval_path(key))):
+            _deny_external(payload, tool, command, key, "审计不可写", "审计失败关闭")
+            return
+        _clear_deny_count(f"R3/external-write|{os.environ.get('AI_GATE_SESSION_ID','')}|"
+                          f"{input_hash}")
         _emit_external(payload, "allow", f"外部写已有人工预批准（{why}）")
         return
-    if tool:
-        approval_example = f"--tool {tool} --input-json <json>"
-    else:
-        approval_example = '--command "' + command + '"'
-    reason = (f"外部写动作被 R3 门禁拒绝（{hit}；{why}）。需人工预批准："
-              f"python gates/gate.py approve --by <人> --minutes 30 "
-              f"{approval_example}")
-    audit("external-write-deny", tool=tool, command=command, reason=hit, detail=why)
-    _emit_external(payload, "deny", reason)
+    _deny_external(payload, tool, command, key, hit, why)
 
 
 def cmd_approve(args):
@@ -752,6 +1078,9 @@ def cmd_approve(args):
     key = _approval_key(command=args.command, tool=tool, tool_input=tool_input)
     if not key:
         die("必须提供 --command 或 --tool")
+    required, signers, policy_error = _signature_policy()
+    if policy_error:
+        die(policy_error)
     rec = {"schema_version": "1", "key": key,
            "command": args.command or "", "tool": tool or "",
            "approved_by": args.by,
@@ -761,7 +1090,6 @@ def cmd_approve(args):
     APPROVAL_DIR.mkdir(parents=True, exist_ok=True)
     ap = _approval_path(key)
     raw = json.dumps(rec, sort_keys=True, ensure_ascii=False, indent=2).encode("utf-8") + b"\n"
-    signers = _allowed_signers()
     if signers.is_file():
         key_file = Path(os.environ.get("AI_GATE_APPROVAL_KEY",
                                        str(Path.home() / ".claude" / "gates" / "approval_key")))
@@ -803,15 +1131,26 @@ def cmd_approve(args):
 
 
 def cmd_security_status(args):
-    signers = _allowed_signers()
+    required, signers, policy_error = _signature_policy()
     print(f"allowed_signers: {signers} ({'已配置' if signers.is_file() else '未配置'})")
     print(f"approval_dir: {APPROVAL_DIR}")
-    print(f"模式: {'签名批准（执行方无法伪造）' if signers.is_file() else '兼容模式（同权进程可伪造批准）'}")
+    if policy_error:
+        print(f"模式: 严格签名（策略缺失，所有外发批准失败关闭）")
+        print(f"错误: {policy_error}")
+        sys.exit(1)
+    print(f"模式: {'严格签名（required，执行方无法伪造批准）' if required else '兼容模式（同权进程可伪造批准）'}")
 
 
 def cmd_memory(args):
+    set_audit_context(rule="memory", input_hash=sha256_raw(Path(args.file)), require_audit=True)
     text = Path(args.file).read_text(encoding="utf-8", errors="replace")
     raw = sum(1 for line in text.splitlines() if any(p.search(line) for p in RAW_PATTERNS))
+    if any(len(line) > 160 and re.search(r"\b(?:DEBUG|TRACE)\b", line, re.I)
+           for line in text.splitlines()):
+        raw += 2
+    if re.search(r"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}", text) and \
+            re.search(r"(?i)(?:Speaker\s*[A-Z0-9]+|说话人|发言人)\s*[:：]", text):
+        raw += 2
     if raw >= 2:
         die(f"{args.file}: 疑似原始记录（{raw} 行时间戳/发言人），不得写入长期记忆")
     for p in SECRET_PATTERNS:
@@ -819,9 +1158,66 @@ def cmd_memory(args):
             die(f"{args.file}: 疑似秘密/凭据，不得写入长期记忆")
     if args.require_provenance:
         fm, _ = split_frontmatter(text)
-        if not fm or not fm.get("provenance_status"):
-            die(f"{args.file}: 长期记忆缺 provenance_status")
+        if not fm:
+            die(f"{args.file}: 长期记忆缺 frontmatter")
+        if fm.get("provenance_status") not in PROVENANCE:
+            die(f"{args.file}: provenance_status 非法或缺失")
+        if not nonempty(fm.get("owner")):
+            die(f"{args.file}: 长期记忆缺 owner")
+        if not (nonempty(fm.get("source")) or nonempty(fm.get("source_record"))):
+            die(f"{args.file}: 长期记忆缺 source/source_record")
+        if not (nonempty(fm.get("scope")) or nonempty(fm.get("layer"))):
+            die(f"{args.file}: 长期记忆缺 scope/layer")
     ok(f"memory 检查通过（{args.file}）")
+
+
+def cmd_promotion(args):
+    set_audit_context(rule="promotion", input_hash=sha256_raw(Path(args.file)), require_audit=True)
+    try:
+        d = json.load(open(args.file, encoding="utf-8"))
+    except Exception as e:
+        die(f"晋升记录解析失败: {e}")
+    check_schema("promotion.schema.json", d, "promotion")
+    sessions = d.get("session_ids") or []
+    if len(sessions) != len(set(sessions)):
+        die("session_ids 重复")
+    if d.get("status") != "proposed":
+        die(f"晋升记录 status={d.get('status')!r}，只接受 proposed 进入人工审批")
+    base = Path(args.file).resolve().parent
+    for ev in d.get("evidence") or []:
+        path = _resolve(base, ev["path"])
+        _check_file_hash(path, ev["sha256"], f"晋升证据 {ev['path']}")
+    for mode in d.get("failure_modes") or []:
+        if is_placeholder(mode):
+            die("failure_modes 含空占位项")
+    target = Path(d["target_path"])
+    if target.is_absolute() or ".." in target.parts:
+        die("target_path 必须是仓库内相对路径")
+    scope = d.get("scope") or {}
+    if scope.get("type") not in COMPONENT_TYPES:
+        die(f"scope.type 非法: {scope.get('type')!r}")
+    if Path(scope.get("path", "")).is_absolute() or ".." in Path(scope.get("path", "")).parts:
+        die("scope.path 必须是仓库内相对路径")
+    git = d.get("git") or {}
+    repo = Path(git.get("repo", ""))
+    if not repo.is_dir():
+        die(f"git.repo 不存在: {repo}")
+    try:
+        head = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"],
+                              capture_output=True, text=True, timeout=15).stdout.strip()
+        status = subprocess.run(["git", "-C", str(repo), "status", "--porcelain"],
+                                capture_output=True, text=True, timeout=15).stdout.strip()
+    except Exception as e:
+        die(f"git 检查失败: {e}")
+    if not head.startswith(git.get("commit", "")):
+        die(f"git.commit={git.get('commit')} 与当前 HEAD={head[:12]} 不一致")
+    if status:
+        die("git 工作树不干净，晋升检查要求 clean=true")
+    if not (repo / scope["path"]).exists():
+        die(f"scope.path 不存在: {scope['path']}")
+    if not nonempty(d.get("owner")):
+        die("晋升记录缺 owner")
+    ok("晋升检查通过（仅检查字段/hash/证据/git/范围，不自动批准）")
 
 
 def cmd_task_package(args):
@@ -848,6 +1244,8 @@ def sha256_raw(path):
 
 
 def cmd_install(args):
+    set_audit_context(rule="install", input_hash=sha256_raw(Path(args.manifest)),
+                      require_audit=True)
     try:
         m = json.load(open(args.manifest, encoding="utf-8"))
     except Exception as e:
@@ -900,10 +1298,13 @@ def build_parser():
     p = sub.add_parser("record")
     p.add_argument("--assets-repo", required=True)
     p.add_argument("--asset-id", required=True)
+    p.add_argument("--require-distributable", action="store_true")
     p.set_defaults(func=cmd_record)
 
     p = sub.add_parser("asset-registry")
     p.add_argument("--assets-repo", required=True)
+    p.add_argument("--require-distributable", action="store_true",
+                   help="同时要求每条资产可新分发；默认只校验账册合法性")
     p.set_defaults(func=cmd_asset_registry)
 
     p = sub.add_parser("component-registry")
@@ -939,6 +1340,10 @@ def build_parser():
     p.add_argument("--file", required=True)
     p.add_argument("--require-provenance", action="store_true")
     p.set_defaults(func=cmd_memory)
+
+    p = sub.add_parser("promotion")
+    p.add_argument("--file", required=True)
+    p.set_defaults(func=cmd_promotion)
 
     p = sub.add_parser("task-package")
     p.add_argument("--file", required=True)

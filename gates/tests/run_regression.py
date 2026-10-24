@@ -305,10 +305,11 @@ def main():
 
     # 发布层完整
     bd, m = make_build(TMP / "b-release-ok", assets_repo)
-    m["tests"].append("results.json")
+    m["tests"] += ["results.json", "consumer.py"]
     write(bd / "build-manifest.json", json.dumps(m, ensure_ascii=False, indent=2))
     hashes = {p.name: sha(p) for p in (bd / "artifacts").glob("*")}
     evidence = bd / "tests" / "trigger.md"
+    write(bd / "tests" / "consumer.py", "print('ok')\n")
     write(bd / "tests" / "results.json", json.dumps({
         "asset_id": ASSET_ID,
         "source_record_sha256": m["source_record_sha256"],
@@ -317,6 +318,8 @@ def main():
         "commands": [{"command": "true", "exit_code": 0}],
         "consumer_test": {"command": "true", "exit_code": 0,
                           "executed_at": "2026-10-24T10:00:00+08:00",
+                          "script_path": "tests/consumer.py",
+                          "script_sha256": sha(bd / "tests" / "consumer.py"),
                           "evidence_path": "tests/trigger.md",
                           "evidence_sha256": sha(evidence)},
         "artifact_sha256": hashes}, ensure_ascii=False, indent=2))
@@ -331,16 +334,84 @@ def main():
         ensure_ascii=False, indent=2))
     r = run_b(bd, assets_repo, release=True)
     check("B/release-complete-accepted", r.returncode == 0, r.stdout[-400:])
+    write(bd / "tests" / "consumer.py", "import sys\nsys.exit(19)\n")
+    r = run_b(bd, assets_repo, release=True)
+    check("B/stale-consumer-script-rejected", r.returncode != 0, r.stdout[-300:])
+
+    # B/G 对非法 form/date 的跨入口拒绝
+    bad_assets = TMP / "assets-bad-schema"
+    shutil.copytree(assets_repo, bad_assets)
+    rec = bad_assets / f"assets/prop/{ASSET_ID}-test.md"
+    mtext = rec.read_text(encoding="utf-8")
+    m = re.match(r"^---\s*\n(.*?)\n---\s*\n(.*)$", mtext, re.S)
+    import yaml as _yaml
+    rfm = _yaml.safe_load(m.group(1)); rbody = m.group(2)
+    rfm.update({"form": "NOT_A_FORM", "approved_date": "NOT_A_DATE"})
+    rec.write_text("---\n" + _yaml.safe_dump(rfm, allow_unicode=True,
+                    sort_keys=False).rstrip() + "\n---\n" + rbody, encoding="utf-8")
+    ap = bad_assets / "approvals" / f"{ASSET_ID}.json"
+    a = json.loads(ap.read_text(encoding="utf-8"))
+    a["content_sha256"] = hashlib.sha256((json.dumps(
+        {k: v for k, v in rfm.items() if k != "implementation"}, sort_keys=True,
+        ensure_ascii=False, default=str) + "\n---\n" + rbody).encode()).hexdigest()
+    a["record_sha256"] = sha(rec)
+    ap.write_text(json.dumps(a, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    bd_bad, _ = make_build(TMP / "b-bad-schema", bad_assets)
+    r = run_b(bd_bad, bad_assets)
+    check("B/invalid-form-date-rejected", r.returncode != 0, r.stdout[-300:])
+    r = run([PY, "-X", "utf8", str(REPO / "gates/gate.py"), "record",
+             "--assets-repo", str(bad_assets), "--asset-id", ASSET_ID])
+    check("G/invalid-form-date-rejected", r.returncode != 0, r.stdout[-300:])
+
+    # G 账册允许 deferred；K/G/B 在 allowed_signers 启用时都要求签名
+    def_assets = TMP / "assets-deferred"
+    shutil.copytree(assets_repo, def_assets)
+    drec = def_assets / f"assets/prop/{ASSET_ID}-test.md"
+    dtext = drec.read_text(encoding="utf-8")
+    dm = re.match(r"^---\s*\n(.*?)\n---\s*\n(.*)$", dtext, re.S)
+    dfm = _yaml.safe_load(dm.group(1)); dbody = dm.group(2)
+    dfm.update({"ai_form": None, "mapping_status": "deferred",
+                "mapping_reason": "当前阶段不 AI 化，等待领域 owner"})
+    drec.write_text("---\n" + _yaml.safe_dump(dfm, allow_unicode=True,
+                    sort_keys=False).rstrip() + "\n---\n" + dbody, encoding="utf-8")
+    dap = def_assets / "approvals" / f"{ASSET_ID}.json"
+    da = json.loads(dap.read_text(encoding="utf-8"))
+    da["content_sha256"] = hashlib.sha256((json.dumps(
+        {k: v for k, v in dfm.items() if k != "implementation"}, sort_keys=True,
+        ensure_ascii=False, default=str) + "\n---\n" + dbody).encode()).hexdigest()
+    da["record_sha256"] = sha(drec)
+    da["scope"]["ai_form"] = None
+    dap.write_text(json.dumps(da, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    r = run([PY, "-X", "utf8", str(REPO / "gates/gate.py"), "record",
+             "--assets-repo", str(def_assets), "--asset-id", ASSET_ID])
+    check("G/deferred-ledger-accepted", r.returncode == 0, r.stdout[-300:])
+
+    sig_assets = TMP / "assets-signers"
+    shutil.copytree(assets_repo, sig_assets)
+    if shutil.which("ssh-keygen"):
+        key = TMP / "sig-key"
+        run(["ssh-keygen", "-t", "ed25519", "-N", "", "-f", str(key), "-q"])
+        pub = Path(str(key) + ".pub").read_text(encoding="utf-8").strip()
+        a0 = json.loads((sig_assets / "approvals" / f"{ASSET_ID}.json").read_text(
+            encoding="utf-8"))
+        (sig_assets / "approvals" / "allowed_signers").write_text(
+            f"{a0.get('approver')} {pub}\n", encoding="utf-8")
+        r = run([PY, "-X", "utf8", str(REPO / "gates/gate.py"), "record",
+                 "--assets-repo", str(sig_assets), "--asset-id", ASSET_ID])
+        check("G/signature-policy-shared-rejected", r.returncode != 0, r.stdout[-300:])
+        bd_sig, _ = make_build(TMP / "b-signers", sig_assets)
+        r = run_b(bd_sig, sig_assets)
+        check("B/signature-policy-shared-rejected", r.returncode != 0, r.stdout[-300:])
 
     print("[3] 任务包 strict")
     sys.path.insert(0, str(REPO / "skills/orchestrator/scripts"))
     import task_packager as tp
-    base = tp.create_task_package("t", "d", "script")
-    base["execution"]["target"] = str(REPO / "skills/orchestrator/scripts/task_packager.py")
-    base["acceptance_criteria"][0].update({"expected": "ok", "evidence_path": "out.log",
+    tp_base = tp.create_task_package("t", "d", "script")
+    tp_base["execution"]["target"] = str(REPO / "skills/orchestrator/scripts/task_packager.py")
+    tp_base["acceptance_criteria"][0].update({"expected": "ok", "evidence_path": "out.log",
                                            "independent_review": True})
     def tp_check(name, mutate, expect_ok=False):
-        pkg = json.loads(json.dumps(base)); mutate(pkg)
+        pkg = json.loads(json.dumps(tp_base)); mutate(pkg)
         p = TMP / f"tp-{name}.json"; write(p, json.dumps(pkg, ensure_ascii=False))
         ok = tp.validate_task_package(str(p), strict=True)
         check(f"task/{name}", ok == expect_ok)
@@ -443,9 +514,13 @@ def main():
     g = [PY, "-X", "utf8", str(REPO / "gates/gate.py")]
     r = run(g + ["record", "--assets-repo", str(assets_repo), "--asset-id", ASSET_ID])
     check("gate/record-binding", r.returncode == 0, r.stdout[-300:])
+    write(TMP / "req.md", "requirement card\n")
     plan = {"goal": "完成一个可验证的测试目标", "constraints": ["c"], "inputs": ["i"],
             "outputs": ["o"], "boundaries": ["b"], "acceptance": ["a"],
-            "human_gates": ["h"], "version": "1"}
+            "human_gates": ["h"], "version": "1",
+            "requirement_card": {"path": "req.md", "sha256": sha_raw(TMP / "req.md")},
+            "acceptance_criteria_hash": hashlib.sha256(json.dumps(
+                ["a"], sort_keys=True, ensure_ascii=False).encode()).hexdigest()}
     pfile = TMP / "plan.json"; write(pfile, json.dumps(plan, ensure_ascii=False))
     r = run(g + ["plan", "--file", str(pfile), "--require-approval"])
     check("gate/plan-without-approval-rejected", r.returncode != 0)
@@ -475,7 +550,10 @@ def main():
                          "evidence_path": "plan.json", "evidence_sha256": sha_raw(pfile),
                          "result": "pass"}], "verdict": "pass",
            "reviewer": "same", "executor": "same", "independent": True,
+           "reviewer_run_id": "run-r", "executor_run_id": "run-e",
            "reviewed_at": "2026-10-24",
+           "reviewer_inputs": [{"path": name, "sha256": sha_raw(TMP / name)}
+                               for name in ("task.json", "plan.json", "self.txt", "art.txt")],
            "self_review": {"result": "pass", "evidence_path": "self.txt",
                            "evidence_sha256": sha_raw(TMP / "self.txt")},
            "artifact_sha256": {"art.txt": sha_raw(TMP / "art.txt")}}
@@ -716,6 +794,226 @@ def main():
              "--level", "3", "--tool-id", "toolu_x", "--max-input=50000",
              "--max-result=50000"], env={"HOME": str(ex_home), "USERPROFILE": str(ex_home)})
     check("extract/reaudit/equals-max-args", "TRUNCATED" not in r.stdout, r.stdout[-200:])
+
+    print("[8] 第三轮 T01–T14 回归")
+    # T01 未知 MCP/脚本 HTTP 默认拒绝，只读 MCP 放行
+    for name, hook_obj, want_allow in [
+        ("batch-update", {"tool_name": "mcp__github__batch_update", "tool_input": {"x": 1}}, False),
+        ("set-permissions", {"tool_name": "mcp__github__set_permissions", "tool_input": {"x": 1}}, False),
+        ("unknown-mcp", {"tool_name": "mcp__vendor__frobnicate", "tool_input": {"x": 1}}, False),
+        ("read-mcp", {"tool_name": "mcp__github__get_file_contents",
+                      "tool_input": {"path": "a"}}, True),
+        ("missing-command", {"tool_name": "Bash", "tool_input": {}}, False),
+        ("missing-tool", {"tool_input": {"command": "echo hi"}}, False),
+    ]:
+        r = run(g + ["external-write"], env=env_ap,
+                input_text=json.dumps(hook_obj, ensure_ascii=False))
+        got = '"permissionDecision": "allow"' in r.stdout
+        check(f"gate/external3/{name}", got == want_allow, r.stdout[-300:])
+    r = run(g + ["external-write", "--command",
+                 "python -c \"import httpx; httpx.post('http://x')\""], env=env_ap)
+    check("gate/external3/httpx-denied", r.returncode != 0, r.stdout[-200:])
+
+    # T02 显式签名策略缺失时失败关闭
+    env_missing = {"AI_GATE_APPROVAL_DIR": str(TMP / "ap-missing"),
+                   "AI_GATE_ALLOWED_SIGNERS": str(TMP / "missing-signers"),
+                   "AI_GATE_AUDIT_LOG": str(TMP / "audit-missing.jsonl")}
+    r = run(g + ["approve", "--command", "git push origin main", "--by", "tester"],
+            env=env_missing)
+    check("gate/signature3/missing-policy-approve-denied", r.returncode != 0, r.stdout[-200:])
+    r = run(g + ["external-write"], env=env_missing, input_text=hook_in)
+    check("gate/signature3/missing-policy-deny", '"permissionDecision": "deny"' in r.stdout,
+          r.stdout[-300:])
+    r = run(g + ["security-status"], env=env_missing)
+    check("gate/signature3/status-fails", r.returncode != 0, r.stdout[-200:])
+
+    # T03/T04 验收指定证据、必交付、finding 与 run 身份
+    adir = TMP / "acc3"; adir.mkdir()
+    task3 = {"task_id": "T3",
+             "output_contract": {"primary": {"type": "file", "location": "required.txt"}},
+             "acceptance_criteria": [{"id": "AC-1", "expected": "ok", "evidence_path": "ev.txt",
+                                      "check_method": "manual", "independent_review": True,
+                                      "severity": "major"}]}
+    write(adir / "task.json", json.dumps(task3, ensure_ascii=False))
+    write(adir / "ev.txt", "evidence\n"); write(adir / "other.txt", "other\n")
+    write(adir / "self.txt", "self\n"); write(adir / "required.txt", "required\n")
+    def acc3(evidence="ev.txt", extra_artifact=None, findings=None, same_run=False):
+        return {"task_id": "T3", "task_package": "task.json",
+                "task_package_sha256": sha_raw(adir / "task.json"),
+                "checklist_hash": hashlib.sha256(json.dumps(
+                    task3["acceptance_criteria"], sort_keys=True,
+                    ensure_ascii=False).encode()).hexdigest(),
+                "criteria": [{"id": "AC-1", "expected": "ok", "check_method": "manual",
+                              "evidence_path": evidence,
+                              "evidence_sha256": sha_raw(adir / evidence),
+                              "result": "pass"}],
+                "verdict": "pass", "reviewer": "rev", "executor": "exec",
+                "reviewer_run_id": "run-r" if not same_run else "run-e",
+                "executor_run_id": "run-e", "independent": True,
+                "reviewed_at": "2026-10-24",
+                "reviewer_inputs": [{"path": p, "sha256": sha_raw(adir / p)}
+                                    for p in ("task.json", "ev.txt", "self.txt",
+                                              "required.txt", "other.txt")],
+                "self_review": {"result": "pass", "evidence_path": "self.txt",
+                                "evidence_sha256": sha_raw(adir / "self.txt"),
+                                "findings": findings or []},
+                "artifact_sha256": {"required.txt": sha_raw(adir / "required.txt")}
+                if extra_artifact is None else {"other.txt": sha_raw(adir / "other.txt")}}
+    def run_acc(obj, name):
+        p = adir / name; write(p, json.dumps(obj, ensure_ascii=False))
+        return run(g + ["acceptance", "--file", str(p), "--base-dir", str(adir)])
+    r = run_acc(acc3(), "ok.json")
+    check("gate/acceptance3/control-pass", r.returncode == 0, r.stdout[-300:])
+    r = run_acc(acc3(evidence="other.txt"), "swap-evidence.json")
+    check("gate/acceptance3/replace-evidence-rejected", r.returncode != 0, r.stdout[-200:])
+    r = run_acc(acc3(extra_artifact=True), "omit-artifact.json")
+    check("gate/acceptance3/omit-required-artifact-rejected", r.returncode != 0, r.stdout[-200:])
+    r = run_acc(acc3(findings=[{"id": "F1", "severity": "major",
+                                "disposition": "open"}]), "open-finding.json")
+    check("gate/acceptance3/open-finding-rejected", r.returncode != 0, r.stdout[-200:])
+    r = run_acc(acc3(same_run=True), "same-run.json")
+    check("gate/acceptance3/same-run-rejected", r.returncode != 0, r.stdout[-200:])
+
+    # T05 结构化计划 AC + 需求卡 hash
+    req3 = TMP / "req3.md"; write(req3, "requirement card 3\n")
+    acc_items = [{"id": "AC-1", "check_method": "manual", "expected": "ok",
+                  "evidence": "ev.txt"}]
+    plan3 = {"goal": "第三轮计划门禁测试目标", "constraints": ["c"], "inputs": ["i"],
+             "outputs": ["o"], "boundaries": ["b"], "acceptance": acc_items,
+             "human_gates": ["h"], "version": "3",
+             "requirement_card": {"path": "req3.md", "sha256": sha_raw(req3)},
+             "acceptance_criteria_hash": hashlib.sha256(json.dumps(
+                 acc_items, sort_keys=True, ensure_ascii=False).encode()).hexdigest()}
+    p3 = TMP / "plan3.json"; write(p3, json.dumps(plan3, ensure_ascii=False))
+    r = run(g + ["plan", "--file", str(p3)])
+    check("gate/plan3/structured-accepted", r.returncode == 0, r.stdout[-300:])
+    bad3 = json.loads(json.dumps(plan3)); bad3["acceptance_criteria_hash"] = "0" * 64
+    write(p3, json.dumps(bad3, ensure_ascii=False))
+    r = run(g + ["plan", "--file", str(p3)])
+    check("gate/plan3/criteria-hash-mismatch-rejected", r.returncode != 0)
+
+    # T06 Memory provenance/owner/raw
+    mem = TMP / "mem3.md"
+    write(mem, "---\nprovenance_status: totally-invalid\n---\n结论正文\n")
+    r = run(g + ["memory", "--file", str(mem), "--require-provenance"], env=env_ap)
+    check("gate/memory3/invalid-provenance-rejected", r.returncode != 0)
+    write(mem, "---\nprovenance_status: verified\nowner: tester\nsource: doc\nlayer: 项目级\n---\n结论正文\n")
+    r = run(g + ["memory", "--file", str(mem), "--require-provenance"], env=env_ap)
+    check("gate/memory3/valid-accepted", r.returncode == 0, r.stdout[-200:])
+    write(mem, "---\nprovenance_status: verified\nowner: tester\nsource: doc\nlayer: 项目级\n---\n"
+              "2026-10-20 10:00:00 Speaker A: hello\n")
+    r = run(g + ["memory", "--file", str(mem), "--require-provenance"], env=env_ap)
+    check("gate/memory3/raw-rejected", r.returncode != 0)
+
+    # T11 公共入口漏登记
+    gcopy = TMP / "gcopy"
+    shutil.copytree(REPO, gcopy, ignore=shutil.ignore_patterns(".git", "__pycache__"))
+    write(gcopy / "rules" / "zz-unregistered.md",
+          "---\nname: zz\n---\n# unregistered\n")
+    r = run([PY, "-X", "utf8", str(gcopy / "gates/gate.py"), "component-registry",
+             "--repo", str(gcopy)])
+    check("gate/registry3/unregistered-public-rule-rejected", r.returncode != 0,
+          r.stdout[-300:])
+
+    # E01 promotion 检查
+    prepo = TMP / "promo-repo"; (prepo / "rules").mkdir(parents=True)
+    write(prepo / "rules" / "x.md", "# x\n")
+    run(["git", "-C", str(prepo), "init", "-q"])
+    run(["git", "-C", str(prepo), "-c", "user.email=t@x", "-c", "user.name=t",
+         "add", "."])
+    run(["git", "-C", str(prepo), "-c", "user.email=t@x", "-c", "user.name=t",
+         "commit", "-q", "-m", "init"])
+    head = subprocess.run(["git", "-C", str(prepo), "rev-parse", "HEAD"],
+                          capture_output=True, text=True).stdout.strip()
+    ev3 = TMP / "promo-ev.txt"; write(ev3, "evidence\n")
+    promo = {"schema_version": "1", "candidate_id": "cand-1",
+             "session_ids": ["s1", "s2"],
+             "evidence": [{"path": str(ev3), "sha256": sha_raw(ev3)}],
+             "failure_modes": ["重复踩坑"], "owner": "tester",
+             "scope": {"type": "rule", "path": "rules/x.md"},
+             "git": {"repo": str(prepo), "commit": head, "clean": True},
+             "target_path": "rules/x.md", "status": "proposed"}
+    pf = TMP / "promotion.json"; write(pf, json.dumps(promo, ensure_ascii=False))
+    r = run(g + ["promotion", "--file", str(pf)], env=env_ap)
+    check("gate/promotion3/valid-accepted", r.returncode == 0, r.stdout[-300:])
+    write(prepo / "dirty.txt", "dirty\n")
+    r = run(g + ["promotion", "--file", str(pf)], env=env_ap)
+    check("gate/promotion3/dirty-git-rejected", r.returncode != 0, r.stdout[-200:])
+
+    # T12/T13 Skill 语义任务与 blocker-only 独立复核
+    pkg = json.loads(json.dumps(tp_base))
+    pkg["execution"] = {"type": "skill", "target": "grill-me-with-doc",
+                        "timeout_seconds": 60, "model": "GLM-5.3"}
+    pkg["metadata"]["task_class"] = "judgment"
+    pfile2 = TMP / "tp-skill.json"; write(pfile2, json.dumps(pkg, ensure_ascii=False))
+    check("task/routing3/skill-judgment-accepted",
+          tp.validate_task_package(str(pfile2), strict=True))
+    pkg2 = json.loads(json.dumps(tp_base))
+    pkg2["acceptance_criteria"][0]["severity"] = "blocker"
+    pkg2["acceptance_criteria"][0]["independent_review"] = True
+    pfile3 = TMP / "tp-blocker.json"; write(pfile3, json.dumps(pkg2, ensure_ascii=False))
+    check("task/routing3/blocker-only-independent-accepted",
+          tp.validate_task_package(str(pfile3), strict=True))
+
+    # P01/P02 timeout 持久化 + 空输出 dead-letter
+    clear_queue(home)
+    slow = TMP / "slow_model.py"
+    write(slow, "import time\ntime.sleep(5)\nprint('[]')\n")
+    calls = TMP / "calls.txt"
+    fast = TMP / "fast_model.py"
+    write(fast, "import os\nopen(os.environ['CALLS'],'a').write('1')\nprint('[]')\n")
+    write(q2 / "jobs.jsonl", json.dumps({"session_id": "s-timeout",
+          "transcript_path": str(tr), "enqueued_at": 20}) + "\n")
+    run([PY, "-X", "utf8", str(REPO / "skills/session-distiller/scripts/worker.py"),
+         "--timeout", "1"], env={**env, "DISTILLER_CMD": str(slow),
+                                 "MAX_JOBS_PER_DAY": "100"})
+    state = json.load(open(home / ".claude/self-evolve/queue/worker-state.json",
+                           encoding="utf-8")) if (home / ".claude/self-evolve/queue/worker-state.json").exists() else {}
+    # state 实际路径由 worker 决定，改用 cursor 检查
+    cur = home / ".claude/self-evolve/distill-state/s-timeout.json"
+    check("worker/timeout3/state-failed",
+          cur.exists() and json.load(open(cur, encoding="utf-8")).get("status") == "failed",
+          cur)
+    run([PY, "-X", "utf8", str(REPO / "skills/session-distiller/scripts/worker.py")],
+        env={**env, "DISTILLER_CMD": str(fast), "CALLS": str(calls),
+             "MAX_JOBS_PER_DAY": "100"})
+    check("worker/timeout3/immediate-retry-calls-model",
+          calls.exists() and calls.read_text() == "1", calls)
+
+    clear_queue(home)
+    empty = TMP / "empty_model.py"; write(empty, "print('')\n")
+    write(q2 / "jobs.jsonl", json.dumps({"session_id": "s-empty",
+          "transcript_path": str(tr), "enqueued_at": 21}) + "\n")
+    for i in range(3):
+        run([PY, "-X", "utf8", str(REPO / "skills/session-distiller/scripts/worker.py")],
+            env={**env, "DISTILLER_CMD": str(empty), "MAX_JOBS_PER_DAY": "100"})
+    dl = q2 / "dead-letter.jsonl"
+    check("worker/empty3/dead-letter-after-3",
+          dl.exists() and "s-empty" in dl.read_text(encoding="utf-8"), dl)
+
+    # T14 审计关联字段、连续拒绝升级与审计写失败失败关闭
+    esc_cmd = "git push origin main"
+    env_esc = {**env_ap, "AI_GATE_SESSION_ID": "sess-esc",
+               "AI_GATE_AUDIT_LOG": str(TMP / "audit-esc.jsonl"),
+               "AI_GATE_APPROVAL_DIR": str(TMP / "ap-esc")}
+    outs = [run(g + ["external-write", "--command", esc_cmd], env=env_esc).stdout
+            for _ in range(3)]
+    check("gate/audit3/third-deny-escalates", "升级" in outs[2], outs[2][-300:])
+    esc_lines = [json.loads(x) for x in
+                 (TMP / "audit-esc.jsonl").read_text(encoding="utf-8").splitlines()
+                 if x.strip()]
+    last = esc_lines[-1] if esc_lines else {}
+    check("gate/audit3/fields-present",
+          all(k in last for k in ("session_id", "rule", "input_hash", "decision"))
+          and last.get("session_id") == "sess-esc" and last.get("decision") == "deny",
+          str(last)[-300:])
+    blocked = TMP / "audit-blocked"; blocked.mkdir()
+    r = run(g + ["record", "--assets-repo", str(assets_repo),
+                 "--asset-id", "EA-20261022-99"],
+            env={**env_ap, "AI_GATE_AUDIT_LOG": str(blocked)})
+    check("gate/audit3/write-failure-fails-closed",
+          r.returncode != 0 and "审计日志写入失败" in (r.stdout + r.stderr),
+          (r.stdout + r.stderr)[-300:])
 
     print(f"\n结果: PASS={PASS} FAIL={FAIL}  (fixtures: {TMP})")
     if FAIL:

@@ -5,8 +5,13 @@ asset_id: EA-20261022-06
 ai_form: Rule
 provenance_status: source-excerpt
 provenance_note: 摘自《AI 公共规范（v0.7 草案）》revision 5267 的强制规则清单，未逐条对照规范全文核验
+source_record: assets/20261022-1705-ai-public-rules/EA-20261022-06-no-raw-records-in-memory.md
+release_channel: component-library
+source_artifact: build/EA-20261022-06/artifacts/rule-no-raw-records-in-memory.md
+source_artifact_sha256: 1670c92c5e5a214699f807c28e11b5d71f404a7ec249485b8bc665c4b1732545
+source_revision: '5267'
+distribution_note: 正文与实现产物一致；仅补充来源指针与当前 revision。
 ---
-
 # 原始记录不得写入长期记忆
 
 ## 规则

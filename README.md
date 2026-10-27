@@ -1,4 +1,4 @@
-# AI Native Basic Component
+# Native Components
 
 AI Native 工程流程的可复用基础组件库。组件按类型分目录存放，可独立评审、版本化、安装；本仓库只放组件本体与说明，不放项目私有数据。
 
@@ -23,6 +23,7 @@ AI Native 工程流程的可复用基础组件库。组件按类型分目录存�
 | [`prompts/`](prompts/README.md) | 可复用的提示词模板（Prompt） | 待补充 |
 | [`hooks/`](hooks/README.md) | 确定性钩子脚本与配置示例（Hook） | `orchestrator`、`self-evolve` |
 | [`agents/`](agents/README.md) | 子代理定义（Agent） | `orchestrator` |
+| [`env/`](env/README.md) | 本机 AI 开发环境快照（原 `claude-code-env`） | `agents`/`rules`/`skills`/`hooks`/`scenarios` |
 | [`docs/`](docs/README.md) | 使用指南、设计说明、规范链接 | [领域目录映射](docs/domain-taxonomy.md) |
 
 领域级组件按 9 个领域分目录存放：`memory/<domain>/`、`rules/<domain>/`，slug 映射见 [docs/domain-taxonomy.md](docs/domain-taxonomy.md)。公共级规则与记忆直接放 `rules/`、`memory/` 根目录。

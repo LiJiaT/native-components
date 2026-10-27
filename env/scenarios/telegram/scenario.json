@@ -1,0 +1,15 @@
+{
+  "name": "Telegram 网关",
+  "triggers": [
+    "telegram",
+    "cc-connect",
+    "cc_connect",
+    "四身份",
+    "overseer",
+    "alfred",
+    "fitness-coach",
+    "travel-planner"
+  ],
+  "state": "STATE.md",
+  "auto_history": false
+}

@@ -1,0 +1,54 @@
+{
+  "skill_name": "assetize",
+  "contract": "技能A只产出 proposal package（proposal.md + assets/ + manifest.json）与入库申请，不生成 AI 落地实现（landings 已移除）",
+  "evals": [
+    {
+      "id": 1,
+      "name": "决策记录资产化（真实：领域划分决策）",
+      "prompt": "资产化以下决策记录：2026-10-22 资产化 skill 领域划分决策——放弃外部标签体系 72 子标签细分，改用 9 领域平铺（架构/设计/验证/时序/DFT/后仿/Firmware/模拟/后端），项目固定 LPDDR6/HBM，领域与项目正交，资产四维正交。含背景/评审结论/最终决策/证据/取舍。",
+      "expected_output": "产出 1 条决策记忆资产（no landings/）+ 对账 manifest.json + 含 7 字段入库申请的 proposal.md，validate exit 0",
+      "assertions": [
+        {"text": "主资产 form=决策记忆", "type": "file_check"},
+        {"text": "不生成 landings/ 目录，也不出现 landing/asset_ref 字段", "type": "file_check"},
+        {"text": "manifest.json 存在，assets 与 assets/ 文件 id 一一对应", "type": "file_check"},
+        {"text": "资产正文含 背景/选项/取舍/证据/日期", "type": "content_check"},
+        {"text": "proposal.md 汇总表含 id/标题/形态/领域/项目/层级/ai_form/suggested_owner 列", "type": "content_check"},
+        {"text": "入库申请含资产ID/来源提案/目标层级领域项目/owner/变更内容/验收清单/回滚方式", "type": "content_check"},
+        {"text": "validate.py exit 0", "type": "script"},
+        {"text": "domains ⊆ 9 领域枚举，project/layer 组合合法", "type": "script"}
+      ],
+      "files": ["evals/inputs/eval-1-decision.md"]
+    },
+    {
+      "id": 2,
+      "name": "工程规则资产化（真实：强制规则清单）",
+      "prompt": "资产化 eval-2-rules.md（5 条团队强制规则：filelist 同步、禁止自动外发、产出须验证评审、子任务带验收清单、原始记录不写入长期记忆）",
+      "expected_output": "≥4 条工程规则资产（每条独立成资产），ai_form=Rule，proposal 含过滤区，validate exit 0",
+      "assertions": [
+        {"text": "每条规则切分为独立资产（≥4 个），form=工程规则", "type": "file_check"},
+        {"text": "ai_form 为 Rule，正文是可直接落成 rules markdown 的祈使句全文", "type": "content_check"},
+        {"text": "层级判定合理：团队强制规则应为公共级，suggested_owner=AI 平台团队", "type": "content_check"},
+        {"text": "validate.py exit 0", "type": "script"},
+        {"text": "R8 原始记录禁令那条也被识别为工程规则资产（未被丢弃）", "type": "content_check"},
+        {"text": "不生成 landings/ 目录", "type": "file_check"}
+      ],
+      "files": ["evals/inputs/eval-2-rules.md"]
+    },
+    {
+      "id": 3,
+      "name": "会议纪要资产化（构造：HBM DFT debug 复盘）",
+      "prompt": "资产化 HBM3E DFT debug 复盘纪要：含环境事实（V0.9 工具链/spare row）、debug 教训（bist_en 与 scan_en 冲突）、决策（stack-level repair 取舍，HBM3 验证过 98%+）、行动项（checklist）、无关内容（团建）",
+      "expected_output": "多单元切分：决策记忆 + 知识库 + 工程规则候选；团建进过滤区；R8 提炼非原文粘贴；validate exit 0",
+      "assertions": [
+        {"text": "多单元切分：≥3 条资产覆盖决策记忆/知识库/工程规则三类形态", "type": "file_check"},
+        {"text": "团建等无关内容进过滤区并给理由，不入资产", "type": "content_check"},
+        {"text": "资产正文为提炼改写（可脱离原文独立成立），非原文段落粘贴", "type": "content_check"},
+        {"text": "domains 含 DFT，project 标 HBM（来源项目）", "type": "script"},
+        {"text": "决策记忆资产含 stack-level vs controller-level 的选项对比与取舍理由", "type": "content_check"},
+        {"text": "validate.py exit 0", "type": "script"},
+        {"text": "不生成 landings/ 目录", "type": "file_check"}
+      ],
+      "files": ["evals/inputs/eval-3-meeting.md"]
+    }
+  ]
+}

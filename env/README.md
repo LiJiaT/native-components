@@ -1,7 +1,9 @@
 # env/ — 本机 AI 开发环境快照（可分发部分）
 
 来源：原独立仓库 `claude-code-env`（`https://github.com/LiJiaT/claude-code-env`，2026-10-27 并入本仓库）。
-本地源目录仍是 `D:\Project\claude-code-env`，用于和 `~/.claude/` 做快照比对；两处内容不一致时以本目录为准再回写快照仓。
+本目录是并入时的快照副本，其中的仓库路径已同步到 `intel-*` / `native-*` 新命名。
+本机源目录仍是 `D:\Project\claude-code-env`（保留 30 天，待人工决定是否归档），其内容仍指旧路径；
+下次从 `~/.claude/` 重新同步快照前，先完成源侧路径更新，否则会把旧路径重新带回来。
 
 ## 收录
 

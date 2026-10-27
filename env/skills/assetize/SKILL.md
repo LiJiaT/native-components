@@ -1,6 +1,6 @@
 ---
 name: assetize
-description: 工程知识资产化（技能A）：把文档、会议纪要、debug 记录、纯文本、JIRA/GitHub Issue 摘录等输入经「收集→分类→映射」产出可评审的资产提案包（proposal.md + assets/ + manifest.json）并生成入库申请，由 owner 批准后形成 approved asset record 落入资产 repo（eng-knowledge-assets）。当用户说"资产化这个文档/纪要/经验"、"把这段 debug 记录入库"、"提炼成资产"、"这个决策值得沉淀"、"propose 入库"，或提供任何工程材料并要求转化为可复用知识资产时使用。只做提案与入库申请，不写 AI 落地实现（那是 asset-ai-ize 的职责）、不直接 push/merge。不用于普通文档摘要、一次性问答或纯内容整理（无入库意图时不触发）。
+description: 工程知识资产化（技能A）：把文档、会议纪要、debug 记录、纯文本、JIRA/GitHub Issue 摘录等输入经「收集→分类→映射」产出可评审的资产提案包（proposal.md + assets/ + manifest.json）并生成入库申请，由 owner 批准后形成 approved asset record 落入资产 repo（native-assets）。当用户说"资产化这个文档/纪要/经验"、"把这段 debug 记录入库"、"提炼成资产"、"这个决策值得沉淀"、"propose 入库"，或提供任何工程材料并要求转化为可复用知识资产时使用。只做提案与入库申请，不写 AI 落地实现（那是 asset-ai-ize 的职责）、不直接 push/merge。不用于普通文档摘要、一次性问答或纯内容整理（无入库意图时不触发）。
 ---
 
 # 工程知识资产化（assetize · 技能 A）
@@ -31,7 +31,7 @@ description: 工程知识资产化（技能A）：把文档、会议纪要、deb
     └── assets/A<n>-<slug>.md       # 资产本体（提案阶段用局部 id A<n>）
 ```
 
-入库批准后，资产升级为 approved asset record 写入资产 repo 本地 clone（`D:\Project\eng-knowledge-assets`）的 `assets/<proposal_id>/`，同时更新该 repo 的 `INDEX.md` 与 `registry.json`；push 由人执行（R3）。
+入库批准后，资产升级为 approved asset record 写入资产 repo 本地 clone（`D:\Project\native-assets`）的 `assets/<proposal_id>/`，同时更新该 repo 的 `INDEX.md` 与 `registry.json`；push 由人执行（R3）。
 
 ## 流程
 
@@ -141,7 +141,7 @@ python -X utf8 ~/.claude/skills/assetize/scripts/validate.py <proposal-dir>
 ### 8 · 入库申请与人工卡点
 
 - 入库申请由**人**提交到资产 repo（或人明确授权的自动化提交）；本技能只产出申请内容与校验材料。技能不得自行关闭 issue、批准 PR 或合并（R3/R9）。
-- **owner 批准后**：把本批资产升级为 approved asset record——frontmatter 增加 `asset_id`（全局 `EA-<YYYYMMDD>-<序号>`）、`proposal_id`、`status: approved`、`approved_by`、`approved_date`，把 `suggested_owner` 落定为 `owner`，并写入空的 `implementation:` 字段；正文原样——写入 `D:\Project\eng-knowledge-assets\assets\<proposal_id>\`，更新该 repo 的 `INDEX.md` 与 `registry.json`，并留一份评审记录到 `reviews/`。push 由人执行。
+- **owner 批准后**：把本批资产升级为 approved asset record——frontmatter 增加 `asset_id`（全局 `EA-<YYYYMMDD>-<序号>`）、`proposal_id`、`status: approved`、`approved_by`、`approved_date`，把 `suggested_owner` 落定为 `owner`，并写入空的 `implementation:` 字段；正文原样——写入 `D:\Project\native-assets\assets\<proposal_id>\`，更新该 repo 的 `INDEX.md` 与 `registry.json`，并留一份评审记录到 `reviews/`。push 由人执行。
 - 通过审批入库时，把一行摘要追加进 `~/.claude/asset-proposals/INDEX.md`。下次运行第 2 步前先查两个 INDEX（本地 + 资产 repo）：语义重复的单元不重复提案，标 `duplicate-of:<已有 asset_id>` 进过滤区——资产库膨胀比缺失更伤（灾难性记忆教训）。
 
 ## 质量线

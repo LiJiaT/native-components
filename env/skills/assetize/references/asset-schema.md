@@ -55,7 +55,7 @@ owner 批准入库后，提案资产升级为 approved asset record（技能 B �
 
 - frontmatter 增加：`asset_id`（全局 `EA-<YYYYMMDD>-<序号>`，同批递增）、`proposal_id`、`status: approved`、`approved_by`、`approved_date`；`suggested_owner` 落定为 `owner`。
 - 正文（`## 内容` / `## 出处与理由`）**原样迁移，不得改写**——改写需走新一轮提案。
-- 写入资产 repo 本地 clone `D:\Project\eng-knowledge-assets\assets\<proposal_id>\`，同步更新 `INDEX.md` 与 `registry.json`，评审结论存 `reviews/`。
+- 写入资产 repo 本地 clone `D:\Project\native-assets\assets\<proposal_id>\`，同步更新 `INDEX.md` 与 `registry.json`，评审结论存 `reviews/`。
 - record 的 `implementation` 字段此时为空，由技能 B 实现通过后回写。
 
 record 的消费契约（statement / evidence / mapping 不得被 B 修改）详见技能 B 的 `references/record-contract.md`。

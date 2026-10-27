@@ -37,7 +37,7 @@ except ImportError:
     print("[FATAL] 需要 pyyaml: python -m pip install pyyaml")
     sys.exit(2)
 
-DEFAULT_ASSETS_REPO = r"D:\Project\eng-knowledge-assets"
+DEFAULT_ASSETS_REPO = r"D:\Project\native-assets"
 
 # (pattern, label, severity: fail|warn)
 SENSITIVE_PATTERNS = [

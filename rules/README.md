@@ -14,7 +14,7 @@
 | [`subtask-acceptance-checklist`](subtask-acceptance-checklist.md) | R7 | 子任务必须携带可逐项判定的验收清单 |
 | [`no-raw-records-in-memory`](no-raw-records-in-memory.md) | R8 | 原始记录不得写入长期记忆 |
 
-这些规则由 `eng-knowledge-assets` 的 EA-20261022-02..06 资产化，本库是公共分发副本；实现包与构建记录仍在 `eng-asset-ai-components`。R3/R4/R7/R8 已有配套确定性工具（`gates/gate.py`、`task_packager.py`），R1 的 filelist hook 仍是缺口。
+这些规则由 `native-assets` 的 EA-20261022-02..06 资产化，本库是公共分发副本；实现包与构建记录仍在 `native-assets-build`。R3/R4/R7/R8 已有配套确定性工具（`gates/gate.py`、`task_packager.py`），R1 的 filelist hook 仍是缺口。
 
 ## 规则要求
 

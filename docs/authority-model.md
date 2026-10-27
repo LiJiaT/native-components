@@ -2,9 +2,9 @@
 
 | 仓库 | 权威内容 | 不承担 |
 |---|---|---|
-| K `eng-knowledge-assets` | 资产语义、批准与 scope、record/registry/INDEX、生命周期状态、退役/替代关系 | 工程实现细节、公共组件分发 |
-| I `eng-asset-ai-components` | 工程实现、构建产物、测试/消费证据、实现历史与发布候选 | 资产批准语义、通用公共组件 |
-| G `ai-native-basic-component` | 通用能力（skills/hooks/gates/schemas/tools）、经批准的公共分发物与来源指针 | 领域资产事实、替代 K 做批准 |
+| K `native-assets` | 资产语义、批准与 scope、record/registry/INDEX、生命周期状态、退役/替代关系 | 工程实现细节、公共组件分发 |
+| I `native-assets-build` | 工程实现、构建产物、测试/消费证据、实现历史与发布候选 | 资产批准语义、通用公共组件 |
+| G `native-components` | 通用能力（skills/hooks/gates/schemas/tools）、经批准的公共分发物与来源指针 | 领域资产事实、替代 K 做批准 |
 
 ## 开发源与分发
 

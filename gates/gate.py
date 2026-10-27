@@ -4,7 +4,7 @@
 
 子命令：
   record            校验单条 approved record + 审批绑定 + 内容 hash
-  asset-registry    校验 eng-knowledge-assets 的 records/registry/INDEX 一致性
+  asset-registry    校验 native-assets 的 records/registry/INDEX 一致性
   component-registry 校验公共组件 registry（七字段、依赖、路径、循环）
   plan              校验计划六要素与审批 scope_hash
   acceptance        校验验收结果聚合与独立复核

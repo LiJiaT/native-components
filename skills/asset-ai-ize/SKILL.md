@@ -1,6 +1,6 @@
 ---
 name: asset-ai-ize
-description: 资产AI化（技能B）：把已批准的工程知识资产（approved asset record，来自 eng-knowledge-assets repo）按其 ai_form 映射生成为具体的 AI 组件实现——Memory/Rule/Skill/Workflow/Hook/Prompt，完成确定性校验与验收测试，产出 implementation package 并生成实现入库申请，由组件 owner 批准后安装或合入 eng-asset-ai-components repo。当用户说"把这条资产落地/实现"、"asset record 做成 rule/skill/memory/hook"、"落地资产 EA-xxx"、"实现这个资产"，或提供 approved asset record 要求转化为 AI 组件时使用。不重新判断资产是否成立、不修改资产语义（statement/evidence/mapping）；映射不可行时返回 mapping_issue。不用于从原始材料提炼资产（那是 assetize 技能 A 的职责）。
+description: 资产AI化（技能B）：把已批准的工程知识资产（approved asset record，来自 native-assets repo）按其 ai_form 映射生成为具体的 AI 组件实现——Memory/Rule/Skill/Workflow/Hook/Prompt，完成确定性校验与验收测试，产出 implementation package 并生成实现入库申请，由组件 owner 批准后安装或合入 native-assets-build repo。当用户说"把这条资产落地/实现"、"asset record 做成 rule/skill/memory/hook"、"落地资产 EA-xxx"、"实现这个资产"，或提供 approved asset record 要求转化为 AI 组件时使用。不重新判断资产是否成立、不修改资产语义（statement/evidence/mapping）；映射不可行时返回 mapping_issue。不用于从原始材料提炼资产（那是 assetize 技能 A 的职责）。
 ---
 
 # 资产AI化（asset-ai-ize · 技能 B）
@@ -73,7 +73,7 @@ implementation.md 必含：**语义保持对照表**（statement 每个可复用
 
 ### 7 · 人工卡点与写回
 
-- 实现申请由**人**提交到 `eng-asset-ai-components`；**组件 owner 评审通过后**分两步落地：① artifacts 从 `build/` 合入 repo 的 `skills/`、`rules/`、`hooks/`、`prompts/`、`components/` 对应目录；② 按 `install.md` 安装到目标运行环境（`~/.claude/` 或项目 `.claude/`）。本技能不自动发布。
+- 实现申请由**人**提交到 `native-assets-build`；**组件 owner 评审通过后**分两步落地：① artifacts 从 `build/` 合入 repo 的 `skills/`、`rules/`、`hooks/`、`prompts/`、`components/` 对应目录；② 按 `install.md` 安装到目标运行环境（`~/.claude/` 或项目 `.claude/`）。本技能不自动发布。
 - **个人级资产不进入公共组件库**：只交付给提交人，`release_channel=personal`、`install_target=personal`；synthetic 仅允许 `test-only`/`test-sandbox`。
 - 批准安装后，**写回**资产 repo 中该 record 的 `implementation` 字段（实现位置、日期、package 路径）——这是唯一允许 B 触碰 record 的地方，且只增不改 statement/evidence/mapping。
 - push 由人执行。

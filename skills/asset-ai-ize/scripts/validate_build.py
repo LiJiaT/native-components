@@ -32,7 +32,7 @@ except ImportError:
     print("[FATAL] 需要 pyyaml: python -m pip install pyyaml")
     sys.exit(2)
 
-DEFAULT_ASSETS_REPO = os.environ.get("ENG_ASSETS_REPO", r"D:\Project\eng-knowledge-assets")
+DEFAULT_ASSETS_REPO = os.environ.get("ENG_ASSETS_REPO", r"D:\Project\native-assets")
 
 AI_FORMS = {"Memory", "Rule", "Skill", "Workflow", "Hook", "Prompt"}
 AI_FORM_TO_ASSET_TYPE = {"Memory": "memory", "Rule": "rule", "Skill": "skill",

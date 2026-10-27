@@ -159,7 +159,7 @@ def _flow_pairs(src, base):
 def managed_block(name, title, target):
     begin = f"<!-- BEGIN AI-NATIVE-COMPONENT:{name} -->"
     end = f"<!-- END AI-NATIVE-COMPONENT:{name} -->"
-    return (f"{begin}\n- [{title}]({target}) — 由 ai-native-basic-component 安装器维护\n{end}\n")
+    return (f"{begin}\n- [{title}]({target}) — 由 native-components 安装器维护\n{end}\n")
 
 
 def render_memory_index(text, comp, target_rel, title):
@@ -420,7 +420,7 @@ def expand_dependencies(selected, reg, no_deps=False):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="ai-native-basic-component 安装器")
+    ap = argparse.ArgumentParser(description="native-components 安装器")
     ap.add_argument("--claude-home", default=str(Path.home() / ".claude"))
     ap.add_argument("--project-slug", help="memory 组件的项目 slug（~/.claude/projects/<slug>）")
     ap.add_argument("--component", action="append", default=[])

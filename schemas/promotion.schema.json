@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ai-native-basic-component/schemas/promotion.schema.json",
+  "$id": "https://native-components/schemas/promotion.schema.json",
   "title": "self-evolution promotion check",
   "type": "object",
   "required": ["schema_version", "candidate_id", "session_ids", "evidence",

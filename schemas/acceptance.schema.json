@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ai-native-basic-component/schemas/acceptance.schema.json",
+  "$id": "https://native-components/schemas/acceptance.schema.json",
   "title": "acceptance result",
   "type": "object",
   "required": ["task_id", "task_package", "task_package_sha256", "checklist_hash",

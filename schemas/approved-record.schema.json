@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ai-native-basic-component/schemas/approved-record.schema.json",
+  "$id": "https://native-components/schemas/approved-record.schema.json",
   "title": "approved asset record",
   "type": "object",
   "required": [

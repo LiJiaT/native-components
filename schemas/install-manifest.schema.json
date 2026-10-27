@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ai-native-basic-component/schemas/install-manifest.schema.json",
+  "$id": "https://native-components/schemas/install-manifest.schema.json",
   "title": "install manifest",
   "type": "object",
   "required": ["schema_version", "transaction_id", "mode", "installed_at",

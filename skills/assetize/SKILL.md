@@ -1,6 +1,6 @@
 ---
 name: assetize
-description: 工程知识资产化（技能A）：把文档、会议纪要、debug 记录、纯文本、JIRA/GitHub Issue 摘录等输入经「收集→分类→映射」产出可评审的资产提案包（proposal.md + assets/ + manifest.json）并生成入库申请，由 owner 批准后形成 approved asset record 落入资产 repo（eng-knowledge-assets）。当用户说"资产化这个文档/纪要/经验"、"把这段 debug 记录入库"、"提炼成资产"、"这个决策值得沉淀"、"propose 入库"，或提供任何工程材料并要求转化为可复用知识资产时使用。只做提案与入库申请，不写 AI 落地实现（那是 asset-ai-ize 的职责）、不直接 push/merge。不用于普通文档摘要、一次性问答或纯内容整理（无入库意图时不触发）。
+description: 工程知识资产化（技能A）：把文档、会议纪要、debug 记录、纯文本、JIRA/GitHub Issue 摘录等输入经「收集→分类→映射」产出可评审的资产提案包（proposal.md + assets/ + manifest.json）并生成入库申请，由 owner 批准后形成 approved asset record 落入资产 repo（native-assets）。当用户说"资产化这个文档/纪要/经验"、"把这段 debug 记录入库"、"提炼成资产"、"这个决策值得沉淀"、"propose 入库"，或提供任何工程材料并要求转化为可复用知识资产时使用。只做提案与入库申请，不写 AI 落地实现（那是 asset-ai-ize 的职责）、不直接 push/merge。不用于普通文档摘要、一次性问答或纯内容整理（无入库意图时不触发）。
 ---
 
 # 工程知识资产化（assetize · 技能 A）

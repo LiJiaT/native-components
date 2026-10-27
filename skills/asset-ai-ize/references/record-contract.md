@@ -31,7 +31,7 @@
 
 ```yaml
 implementation:
-  ai_infra_repo: eng-asset-ai-components
+  ai_infra_repo: native-assets-build
   package: build/<asset_id>/          # 实现包位置（合入后为最终目录，如 rules/）
   installed: <YYYY-MM-DD>
   installed_by: <组件 owner>
@@ -42,5 +42,5 @@ implementation:
 
 ## 4. 与两个 repo 的对账
 
-- 资产 repo（eng-knowledge-assets）：record 的唯一来源；`registry.json` 中该 asset_id 的状态应与 record `status`/`implementation` 一致。
-- AI Infra repo（eng-asset-ai-components）：实现物落位处；build-manifest.json 的 `asset_id` 必须能在资产 repo 中找到对应 approved record——validate_build.py 会校验。
+- 资产 repo（native-assets）：record 的唯一来源；`registry.json` 中该 asset_id 的状态应与 record `status`/`implementation` 一致。
+- AI Infra repo（native-assets-build）：实现物落位处；build-manifest.json 的 `asset_id` 必须能在资产 repo 中找到对应 approved record——validate_build.py 会校验。

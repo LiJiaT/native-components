@@ -4,8 +4,8 @@ AI Native 工程流程的可复用基础组件库。组件按类型分目录存�
 
 相关仓库：
 
-- [`eng-knowledge-assets`](https://github.com/LiJiaT/eng-knowledge-assets)：approved asset records、INDEX、registry。
-- [`eng-asset-ai-components`](https://github.com/LiJiaT/eng-asset-ai-components)：资产实现包与构建历史。
+- [`native-assets`](https://github.com/LiJiaT/native-assets)：approved asset records、INDEX、registry。
+- [`native-assets-build`](https://github.com/LiJiaT/native-assets-build)：资产实现包与构建历史。
 - 本仓库：公共基础组件的分发与安装源。
 
 ## 目录结构
@@ -130,7 +130,7 @@ Windows 使用 `win/*.cmd` 包装器；实际安装路径以 `registry.json` 的
 - 本库只收公共、可复用组件。个人环境规则（如 `auto-mode-classifier`、`telegram-bot-handlers`）、个人 agent（`claude-env-maintainer`）、外部工具技能（`lark-*` 等）不在此列。
 - 规范 §5.8 的 16 类门禁中，计划/任务包/依赖/路由/外发/registry/验收/复核已落到 `gates/gate.py` 或校验器；`filelist-sync-gate`、`context-watermark-gate`、`subagent-output-gate` 仍未实现（R1 要求等价人工检查，后两者需 harness 级事件/字段）。逐项状态见 [`gates/README.md`](gates/README.md)。
 - `PDF2MD` 在参考环境中未找到实现，待 owner 提供后收录。
-- 公共规则 EA-20261022-02..06 的源记录在 `eng-knowledge-assets`，构建历史在 `eng-asset-ai-components`；本库是公共分发副本，变更仍走资产化流程。
+- 公共规则 EA-20261022-02..06 的源记录在 `native-assets`，构建历史在 `native-assets-build`；本库是公共分发副本，变更仍走资产化流程。
 - EA-07/08/09 为 synthetic，已移入 `samples/synthetic/`（test-only），不随安装器安装；生产安装点已撤出。
 - 自进化 worker 已接入 `distill-state` 游标、内容 hash 去重、失败保留与陈旧锁恢复；跨日无会话时仍需按 [`flows/self-evolution/scheduler/`](flows/self-evolution/scheduler/README.md) 配置系统定时任务。
 

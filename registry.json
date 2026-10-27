@@ -9,7 +9,7 @@
       "interface": "输入工程材料，输出 proposal.md + assets/ + manifest.json；CLI: skills/assetize/scripts/validate.py <dir> [--strict]",
       "dependencies": [
         "external:pyyaml",
-        "external:eng-knowledge-assets"
+        "external:native-assets"
       ],
       "version": "1.1.0",
       "status": "active",
@@ -24,7 +24,7 @@
       "dependencies": [
         "assetize",
         "external:pyyaml",
-        "external:eng-knowledge-assets"
+        "external:native-assets"
       ],
       "version": "1.2.0",
       "status": "active",
@@ -325,8 +325,8 @@
       "owner": "AI 平台团队",
       "interface": "三仓权威源、开发源、公共分发与转换职责说明",
       "dependencies": [
-        "external:eng-knowledge-assets",
-        "external:eng-asset-ai-components"
+        "external:native-assets",
+        "external:native-assets-build"
       ],
       "version": "1.0.0",
       "status": "active",
@@ -362,7 +362,7 @@
       "interface": "资产检索→适用性→版本固定→消费验收→反馈流程",
       "dependencies": [
         "docs-domain-taxonomy",
-        "external:eng-knowledge-assets"
+        "external:native-assets"
       ],
       "version": "1.0.0",
       "status": "active",
@@ -376,7 +376,7 @@
       "interface": "资产退役、替代、拆分合并与多消费者台账流程",
       "dependencies": [
         "docs-domain-taxonomy",
-        "external:eng-knowledge-assets"
+        "external:native-assets"
       ],
       "version": "1.0.0",
       "status": "active",

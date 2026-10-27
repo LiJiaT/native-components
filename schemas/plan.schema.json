@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ai-native-basic-component/schemas/plan.schema.json",
+  "$id": "https://native-components/schemas/plan.schema.json",
   "title": "orchestrator plan",
   "type": "object",
   "required": ["goal", "constraints", "inputs", "outputs", "boundaries", "acceptance",

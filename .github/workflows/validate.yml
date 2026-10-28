@@ -18,7 +18,7 @@ jobs:
         run: python gates/gate.py component-registry --repo .
       - name: Hook tests
         run: |
-          PYTHON=python bash hooks/orchestrator/tests/run-tests.sh
+          PYTHON=python bash hooks/engineering-agent/tests/run-tests.sh
           bash hooks/self-evolve/tests/run-tests.sh
       - name: Gate regression tests
         run: bash gates/tests/run-tests.sh

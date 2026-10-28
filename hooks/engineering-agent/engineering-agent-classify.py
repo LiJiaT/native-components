@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-UserPromptSubmit hook: Orchestrator 复杂度预分类。
+UserPromptSubmit hook: Engineering Agent 复杂度预分类。
 
-快速分析用户输入的复杂度，判定为复杂任务时注入 orchestrator 工作流提示，
-让 Claude 自动进入编排模式，不需要用户手动调用 /orchestrator。
+快速分析用户输入的复杂度，判定为复杂任务时注入 engineering-agent 工作流提示，
+让 Claude 自动进入编排模式，不需要用户手动调用 /engineering-agent。
 
 启发式规则（命中 2+ 个信号判定为复杂）：
   1. 输入长度 > 300 字符
@@ -24,7 +24,7 @@ COMPLEX_KEYWORDS = [
     # 规划/分解类
     '计划', '规划', '分解', '分步骤', '分阶段', '分步',
     '项目', '系统', '架构', '设计', '调研', '研究',
-    'workflow', 'pipeline', 'orchestrator', '编排',
+    'workflow', 'pipeline', 'engineering-agent', '编排',
     # 多交付物类
     '完整的', '一套', '整个', '全面',
     # 工程类
@@ -110,16 +110,16 @@ def main() -> None:
         # 简单任务，不注入，静默返回
         return
 
-    # 复杂任务，注入 orchestrator 模式提示
+    # 复杂任务，注入 engineering-agent 模式提示
     signal_desc = "、".join(signals)
     ctx = (
-        f"[Orchestrator 自动激活] 检测到当前任务可能较为复杂 "
+        f"[Engineering Agent 自动激活] 检测到当前任务可能较为复杂 "
         f"（触发信号：{signal_desc}）。"
-        "请考虑委派给 orchestrator agent 处理，工作流如下：\n"
+        "请考虑委派给 Engineering Agent 处理，工作流如下：\n"
         "1. 先做复杂度判断（确认是否真的需要工程化流程）\n"
         "2. 复杂任务则按 澄清→规划→分解→验收→写回 五步执行\n"
         "3. 如判断为简单任务可直接执行，不必强行套流程\n"
-        "详细流程见 orchestrator agent 定义。"
+        "详细流程见 Engineering Agent 定义。"
     )
 
     try:

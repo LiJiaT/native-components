@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://native-components/schemas/plan.schema.json",
-  "title": "orchestrator plan",
+  "title": "engineering-agent plan",
   "type": "object",
   "required": ["goal", "constraints", "inputs", "outputs", "boundaries", "acceptance",
                "human_gates", "version", "requirement_card", "acceptance_criteria_hash"],

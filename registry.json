@@ -1,6 +1,6 @@
 {
   "schema_version": "1",
-  "updated_at": "2026-10-24",
+  "updated_at": "2026-10-27",
   "components": [
     {
       "name": "assetize",
@@ -46,7 +46,7 @@
       "install_target": "user-global"
     },
     {
-      "name": "orchestrator",
+      "name": "engineering-agent-skill",
       "type": "skill",
       "owner": "AI 平台团队",
       "interface": "复杂任务编排入口：分类→澄清→计划→任务包→验收→写回；scripts/task_packager.py validate --strict",
@@ -55,16 +55,17 @@
         "task-packager",
         "external:claude-code"
       ],
-      "version": "1.2.0",
+      "version": "2.0.0",
       "status": "active",
-      "path": "skills/orchestrator",
+      "path": "skills/engineering-agent",
+      "install_dir": "engineering-agent",
       "install_target": "user-global"
     },
     {
       "name": "grill-me-with-doc",
       "type": "skill",
       "owner": "AI 平台团队",
-      "interface": "六维需求澄清模板（目标/约束/输入/输出/边界/验证标准），由 orchestrator 澄清阶段调用",
+      "interface": "六维需求澄清模板（目标/约束/输入/输出/边界/验证标准），由 engineering-agent 澄清阶段调用",
       "dependencies": [],
       "version": "1.0.0",
       "status": "active",
@@ -87,33 +88,33 @@
       "install_target": "user-global"
     },
     {
-      "name": "orchestrator-agent",
+      "name": "engineering-agent",
       "type": "agent",
       "owner": "AI 平台团队",
-      "interface": "Claude Code subagent：接收复杂任务，按五步流程委派与验收；依赖 orchestrator skill",
+      "interface": "Claude Code subagent：接收复杂任务，按五步流程委派与验收；依赖 engineering-agent skill",
       "dependencies": [
-        "orchestrator",
+        "engineering-agent-skill",
         "grill-me-with-doc",
         "external:claude-code"
       ],
-      "version": "1.0.0",
+      "version": "2.0.0",
       "status": "active",
-      "path": "agents/orchestrator.md",
+      "path": "agents/engineering-agent.md",
       "install_target": "user-global"
     },
     {
-      "name": "orchestrator-hooks",
+      "name": "engineering-agent-hooks",
       "type": "hook",
       "owner": "AI 平台团队",
       "interface": "SessionStart 环境提示 + UserPromptSubmit 复杂度预分类；fail-open 旁路，不是强制门禁",
       "dependencies": [
-        "orchestrator",
+        "engineering-agent-skill",
         "external:claude-code"
       ],
-      "version": "1.0.0",
+      "version": "2.0.0",
       "status": "active",
-      "path": "hooks/orchestrator",
-      "install_dir": "orchestrator",
+      "path": "hooks/engineering-agent",
+      "install_dir": "engineering-agent",
       "install_target": "user-global"
     },
     {
@@ -242,7 +243,7 @@
       ],
       "version": "2.2.0",
       "status": "active",
-      "path": "skills/orchestrator/scripts/task_packager.py",
+      "path": "skills/engineering-agent/scripts/task_packager.py",
       "install_target": "user-global"
     },
     {

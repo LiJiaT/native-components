@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-SessionStart hook: Orchestrator 上下文预热。
+SessionStart hook: Engineering Agent 上下文预热。
 
-在 session 启动时注入轻量级编排智能体标识，
-让 Claude 知道当前环境有 orchestrator 能力可用。
+在 session 启动时注入轻量级工程智能体标识，
+让 Claude 知道当前环境有 engineering-agent 能力可用。
 
 设计原则：任何异常都静默退出（exit 0、无输出），绝不阻断 session 启动。
 """
@@ -60,12 +60,12 @@ def main() -> None:
     except Exception:
         data = {}
 
-    # 注入 orchestrator 身份标识（极轻量，不干扰正常对话）
+    # 注入 engineering-agent 身份标识（极轻量，不干扰正常对话）
     ctx = (
-        "[环境标识] 本环境已启用用户级编排智能体 (Orchestrator Agent)。"
+        "[环境标识] 本环境已启用用户级工程智能体 (Engineering Agent)。"
         "当用户提出复杂任务、多步骤项目或需要结构化管理的工作时，"
-        "请主动委派给 orchestrator agent 进行全流程管理（澄清→规划→分解→验收→写回）。"
-        "简单单步任务直接执行即可，不必触发 orchestrator。"
+        "请主动委派给 Engineering Agent 进行全流程管理（澄清→规划→分解→验收→写回）。"
+        "简单单步任务直接执行即可，不必触发 engineering-agent。"
     )
 
     # P1-3：检测当前模型。多来源兜底：hook input model → env ANTHROPIC_MODEL →
@@ -83,13 +83,13 @@ def main() -> None:
     # 无法识别模型时：不当作强模型也不误报，输出一句中性提示（由模型自查）。
     if not current_model:
         ctx += (
-            "\n[模型提示] 未能识别当前 session 模型；orchestrator 建议用强模型编排，"
+            "\n[模型提示] 未能识别当前 session 模型；engineering-agent 建议用强模型编排，"
             "如当前为 flash 级请提示用户切换。"
         )
     elif is_weak_model(current_model):
         ctx += (
             f"\n[模型提示] 当前 session 模型为 {current_model}（轻量级）。"
-            "orchestrator 的澄清/规划/验收属于长程高价值判断，建议使用强模型；"
+            "engineering-agent 的澄清/规划/验收属于长程高价值判断，建议使用强模型；"
             "如遇复杂任务，先提示用户切换模型或用 /model 切换后委派。"
         )
     # 其余情况：已识别且非轻量级，不提示（避免误报）。

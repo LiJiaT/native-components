@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 任务包生成与管理工具。
-用于 orchestrator 快速生成标准化任务包，减少手动格式错误。
+用于 engineering-agent 快速生成标准化任务包，减少手动格式错误。
 
 用法:
   python task_packager.py new --name "读取文件" --desc "读取并分析文件" --type sub-agent
@@ -128,12 +128,12 @@ def create_task_package(name, description, task_type, output_path=None):
         "failure_handling": {
             "max_retries": 2,
             "retry_strategy": "same_executor",
-            "escalation_target": "orchestrator"
+            "escalation_target": "engineering-agent"
         },
         "execution": execution,
         "metadata": {
             "created_at": now,
-            "created_by": "orchestrator",
+            "created_by": "engineering-agent",
             "priority": "medium",
             "estimated_complexity": "medium",
             "task_class": "deterministic" if task_type != "sub-agent" else "judgment",
@@ -477,7 +477,7 @@ def list_task_packages(directory):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Orchestrator 任务包工具")
+    parser = argparse.ArgumentParser(description="Engineering Agent 任务包工具")
     subparsers = parser.add_subparsers(dest="command", help="子命令")
 
     # new

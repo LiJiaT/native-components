@@ -2,7 +2,7 @@
 
 ## 核心结论
 
-编排智能体的**主体是 orchestrator agent**（需要交互式决策、多轮对话、用户确认），但有 **5 个环节可以借助 hook** 增强自动化。⚠️ 其中 3 项已实现，PreToolUse / PostToolBatch 为 v2 待办，SessionEnd 的 orchestrator 任务标签尚未接入（见下）——本文档标注的 ✅ 与实现需逐一核对，避免文档超前于实现。
+工程智能体的**主体是 Engineering Agent**（需要交互式决策、多轮对话、用户确认），但有 **5 个环节可以借助 hook** 增强自动化。⚠️ 其中 3 项已实现，PreToolUse / PostToolBatch 为 v2 待办，SessionEnd 的 engineering-agent 任务标签尚未接入（见下）——本文档标注的 ✅ 与实现需逐一核对，避免文档超前于实现。
 
 ---
 
@@ -16,7 +16,7 @@
 - 检查当前项目目录，加载项目级上下文（CLAUDE.md、.claude/ 目录）
 - 加载相关场景上下文（scenario 触发词匹配）
 - 检查 staging 区待处理事项（蒸馏候选、待确认规则）
-- 注入 orchestrator 的轻量提示（"你是编排智能体，负责..."）
+- 注入 engineering-agent 的轻量提示（"你是工程智能体，负责..."）
 
 **为什么适合 Hook**：
 - 固定动作，不需要决策
@@ -34,7 +34,7 @@
 
 **做什么**：
 - 快速分析用户输入的复杂度（关键词匹配 + 启发式规则）
-- 判定为复杂任务时，注入 orchestrator 的工作流提示
+- 判定为复杂任务时，注入 engineering-agent 的工作流提示
 - 判定为简单任务时，不注入（不干扰正常使用）
 - 可附加：自动附加相关场景的状态快照
 
@@ -47,7 +47,7 @@ def is_complex(prompt):
         any(k in prompt for k in [  # 多步骤关键词
             '计划', '规划', '分解', '分步骤', '分阶段',
             '项目', '系统', '架构', '设计', '调研',
-            'orchestrator', 'workflow', 'pipeline'
+            'engineering-agent', 'workflow', 'pipeline'
         ]),
         prompt.count('\n') > 3,     # 多行结构化输入
         '帮我做一个' in prompt and not '简单' in prompt,
@@ -56,7 +56,7 @@ def is_complex(prompt):
 ```
 
 **为什么适合 Hook**：
-- 前置判断，不需要用户主动触发 orchestrator
+- 前置判断，不需要用户主动触发 engineering-agent
 - 启发式规则即可，不需要 LLM 参与
 - 误判代价低（复杂任务漏判=用户手动触发，简单任务误判=多一点系统提示）
 
@@ -114,7 +114,7 @@ def is_complex(prompt):
 **做什么**：
 - 检查当前 session 是否满足蒸馏入选条件（工具调用数、编辑数、纠错信号数）
 - 满足条件则加入蒸馏队列（调用 session-distiller 的入队逻辑）
-- 对应 orchestrator 闭环的 Step 5 写回的自动化部分
+- 对应 engineering-agent 闭环的 Step 5 写回的自动化部分
 
 **为什么适合 Hook**：
 - 已有现成实现（distill-enqueue）
@@ -123,7 +123,7 @@ def is_complex(prompt):
 
 **实现复杂度**：低（复用现有 distill-enqueue）
 **优先级**：高（已有基础设施，几乎零成本）
-**当前状态**：✅ 已完成——复用现有 `distill-enqueue`：本环境中 orchestrator 无需额外改动即接入蒸馏入队；但「orchestrator 任务 vs 普通任务」的**任务标签记录尚未实现**，属 v2 增量，暂不开发。
+**当前状态**：✅ 已完成——复用现有 `distill-enqueue`：本环境中 engineering-agent 无需额外改动即接入蒸馏入队；但「engineering-agent 任务 vs 普通任务」的**任务标签记录尚未实现**，属 v2 增量，暂不开发。
 
 ---
 
@@ -176,7 +176,7 @@ def is_complex(prompt):
 
 ```
                     ┌─────────────────────────────┐
-                    │      Orchestrator agent      │
+                    │      Engineering Agent      │
                     │  (主体：澄清/规划/分发/验收)  │
                     └──────────────┬──────────────┘
                                    │
@@ -190,14 +190,14 @@ def is_complex(prompt):
 ## 实施建议
 
 ### v1（当前版本，已落地）
-1. ✅ **SessionStart 上下文预热** — 复用 scenario-inject 模式，注入 orchestrator 标识
+1. ✅ **SessionStart 上下文预热** — 复用 scenario-inject 模式，注入 engineering-agent 标识
 2. ✅ **UserPromptSubmit 复杂度预分类** — 启发式规则，复杂任务注入提示
-3. ✅ **SessionEnd 自动蒸馏** — 复用现有 distill-enqueue（orchestrator 任务**标签**未接入，v2 增量）
+3. ✅ **SessionEnd 自动蒸馏** — 复用现有 distill-enqueue（engineering-agent 任务**标签**未接入，v2 增量）
 
 ### v2（后续迭代，未开发）
 4. ⚠️ **PreToolUse 上下文审计** — 监控上下文长度，提醒 compact / 用 sub-agent
 5. ⚠️ **PostToolBatch 进度自检** — 周期性纠偏，防止偏离计划
-6. ⚠️ **orchestrator 任务标签** — SessionEnd 区分 orchestrator 任务与普通任务
+6. ⚠️ **engineering-agent 任务标签** — SessionEnd 区分 engineering-agent 任务与普通任务
 
 ### 配置方式
 
@@ -212,7 +212,7 @@ def is_complex(prompt):
         "hooks": [
           {
             "type": "command",
-            "command": "C:\\Users\\<user>\\.claude\\hooks\\orchestrator\\win\\orchestrator-warmup.cmd",
+            "command": "C:\\Users\\<user>\\.claude\\hooks\\engineering-agent\\win\\engineering-agent-warmup.cmd",
             "timeout": 10
           }
         ]
@@ -223,7 +223,7 @@ def is_complex(prompt):
         "hooks": [
           {
             "type": "command",
-            "command": "C:\\Users\\<user>\\.claude\\hooks\\orchestrator\\win\\orchestrator-classify.cmd",
+            "command": "C:\\Users\\<user>\\.claude\\hooks\\engineering-agent\\win\\engineering-agent-classify.cmd",
             "timeout": 5
           }
         ]

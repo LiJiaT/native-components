@@ -1,6 +1,6 @@
 # 任务包 Schema 定义
 
-任务包（Task Package）是编排智能体分发给执行方的标准化契约。执行方只需依据任务包工作，不需要了解全局上下文。
+任务包（Task Package）是工程智能体分发给执行方的标准化契约。执行方只需依据任务包工作，不需要了解全局上下文。
 
 ## 完整 Schema
 
@@ -23,7 +23,7 @@
       "key": "直接提供的结构化数据"
     },
     "context_summary": "必要的背景说明（最小化，100 字以内）",
-    "orchestrator_plan_ref": "全局计划摘要路径（仅作溯源，不作为执行依据）"
+    "engineering_agent_plan_ref": "全局计划摘要路径（仅作溯源，不作为执行依据）"
   },
 
   "dependencies": [
@@ -69,7 +69,7 @@
     "retry_strategy": "same_executor|different_executor|escalate",
     "fallback_task": "失败后执行的降级任务 ID（可选）",
     "escalation_trigger": "连续失败 N 次或出现特定错误类型时升级",
-    "escalation_target": "orchestrator|human"
+    "escalation_target": "engineering-agent|human"
   },
 
   "execution": {
@@ -85,7 +85,7 @@
 
   "metadata": {
     "created_at": "ISO 8601 时间戳",
-    "created_by": "orchestrator",
+    "created_by": "engineering-agent",
     "priority": "high|medium|low",
     "estimated_complexity": "low|medium|high",
     "tags": ["标签1", "标签2"]
@@ -167,4 +167,4 @@
 2. **最小上下文**：只给执行所需的最少信息，避免上下文污染
 3. **可验证**：每条验收标准都能被判断通过/不通过
 4. **可失败**：明确失败处理策略，不要假设一定成功
-5. **可溯源**：保留 orchestrator_plan_ref 以便回溯，但不作为执行依据
+5. **可溯源**：保留 engineering_agent_plan_ref 以便回溯，但不作为执行依据

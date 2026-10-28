@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/orchestrator/orchestrator-warmup.py",
+            "command": "~/.claude/hooks/engineering-agent/engineering-agent-warmup.py",
             "timeout": 10
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/orchestrator/orchestrator-classify.py",
+            "command": "~/.claude/hooks/engineering-agent/engineering-agent-classify.py",
             "timeout": 5
           }
         ]

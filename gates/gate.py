@@ -10,7 +10,7 @@
   acceptance        校验验收结果聚合与独立复核
   external-write    PreToolUse 外发拦截（默认拒绝，需人工预批准）
   memory            长期记忆写入前的原始记录/秘密检查
-  task-package      调用 orchestrator/task_packager.py 做 strict 校验
+  task-package      调用 engineering-agent/task_packager.py 做 strict 校验
   install           校验安装 manifest 与来源/范围
 
 失败时 exit 1（或 external-write 返回 deny），成功 exit 0。所有判定写
@@ -1221,7 +1221,7 @@ def cmd_promotion(args):
 
 
 def cmd_task_package(args):
-    script = REPO / "skills" / "orchestrator" / "scripts" / "task_packager.py"
+    script = REPO / "skills" / "engineering-agent" / "scripts" / "task_packager.py"
     cmd = [sys.executable, str(script), "validate", args.file]
     if args.strict:
         cmd.append("--strict")

@@ -48,7 +48,7 @@ def main():
     check("installer 为 source-only", reg["installer"].get("install_target") == "source-only")
     with tempfile.TemporaryDirectory() as tmp:
         home = Path(tmp)
-        for name, expected in (("orchestrator-hooks", "hooks/orchestrator"),
+        for name, expected in (("engineering-agent-hooks", "hooks/engineering-agent"),
                                ("self-evolve-hooks", "hooks/self-evolve")):
             rels = [str(dst.relative_to(home)).replace("\\", "/")
                     for _, dst in inst.target_paths(reg[name], home, None)]
@@ -60,6 +60,11 @@ def main():
                       for _, dst in inst.target_paths(reg["assetize"], home, None)]
         check("skill 无缓存文件",
               not any("__pycache__" in r or r.endswith(".pyc") for r in skill_rels))
+        ea_rels = [str(dst.relative_to(home)).replace("\\", "/")
+                   for _, dst in inst.target_paths(reg["engineering-agent-skill"], home, None)]
+        check("engineering-agent-skill 装到 skills/engineering-agent",
+              ea_rels and all(r.startswith("skills/engineering-agent/") for r in ea_rels),
+              ea_rels[:3])
         flow_rels = [str(dst.relative_to(home)).replace("\\", "/")
                      for _, dst in inst.target_paths(reg["self-evolution"], home, None)]
         check("flow README 不再撞同一目标", len(flow_rels) == len(set(flow_rels)), flow_rels)
@@ -143,7 +148,7 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         home = Path(tmp)
         r = run([REPO / "tools/install.py", "--claude-home", home,
-                 "--component", "orchestrator", "--project-slug", "p"])
+                 "--component", "engineering-agent-skill", "--project-slug", "p"])
         check("依赖闭包安装成功", r.returncode == 0, r.stderr[-200:])
         m = json.load(open(latest(home), encoding="utf-8"))
         names = {c["name"] for c in m["components"]}
@@ -153,11 +158,11 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         home = Path(tmp)
         r = run([REPO / "tools/install.py", "--claude-home", home,
-                 "--component", "orchestrator", "--project-slug", "p", "--no-deps"])
+                 "--component", "engineering-agent-skill", "--project-slug", "p", "--no-deps"])
         check("--no-deps 安装成功", r.returncode == 0, r.stderr[-200:])
         m = json.load(open(latest(home), encoding="utf-8"))
         names = {c["name"] for c in m["components"]}
-        check("--no-deps 不装依赖", names == {"orchestrator"}, names)
+        check("--no-deps 不装依赖", names == {"engineering-agent-skill"}, names)
 
     with tempfile.TemporaryDirectory() as tmp:
         home = Path(tmp)

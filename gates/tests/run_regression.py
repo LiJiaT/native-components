@@ -404,10 +404,10 @@ def main():
         check("B/signature-policy-shared-rejected", r.returncode != 0, r.stdout[-300:])
 
     print("[3] 任务包 strict")
-    sys.path.insert(0, str(REPO / "skills/orchestrator/scripts"))
+    sys.path.insert(0, str(REPO / "skills/engineering-agent/scripts"))
     import task_packager as tp
     tp_base = tp.create_task_package("t", "d", "script")
-    tp_base["execution"]["target"] = str(REPO / "skills/orchestrator/scripts/task_packager.py")
+    tp_base["execution"]["target"] = str(REPO / "skills/engineering-agent/scripts/task_packager.py")
     tp_base["acceptance_criteria"][0].update({"expected": "ok", "evidence_path": "out.log",
                                            "independent_review": True})
     def tp_check(name, mutate, expect_ok=False):
@@ -419,7 +419,7 @@ def main():
     tp_check("self-dep", lambda p: p.update({"dependencies": [p["task_id"]]}))
     tp_check("bad-types", lambda p: p.update({"input": 17}))
     tp_check("unknown-method", lambda p: p["acceptance_criteria"][0].update({"check_method": "anything"}))
-    tp_check("self-same", lambda p: p.update({"execution": {"type": "self", "target": "orchestrator",
+    tp_check("self-same", lambda p: p.update({"execution": {"type": "self", "target": "engineering-agent",
                                                              "verifier": "same-run", "timeout_seconds": 60}}))
     tp_check("fake-python", lambda p: p["acceptance_criteria"][0].update(
         {"check_method": "auto", "check_script": "pythonMISSING_DOES_NOT_EXIST.py"}))
@@ -687,11 +687,11 @@ def main():
     check("B/reaudit/raw-date-speaker-rejected", r.returncode != 0)
 
     # R11 任务依赖/独立复核
-    sys.path.insert(0, str(REPO / "skills/orchestrator/scripts"))
+    sys.path.insert(0, str(REPO / "skills/engineering-agent/scripts"))
     import task_packager as tp2
     td = TMP / "tasks2"; td.mkdir()
     main = tp2.create_task_package("m", "d", "script")
-    main["execution"]["target"] = str(REPO / "skills/orchestrator/scripts/task_packager.py")
+    main["execution"]["target"] = str(REPO / "skills/engineering-agent/scripts/task_packager.py")
     main["acceptance_criteria"][0].update({"expected": "ok", "evidence_path": "o",
                                            "independent_review": True})
     main["dependencies"] = ["T-DEP"]
@@ -699,18 +699,18 @@ def main():
     dep["metadata"]["status"] = "blocked"
     write(td / "main.json", json.dumps(main, ensure_ascii=False))
     write(td / "dep.json", json.dumps(dep, ensure_ascii=False))
-    r = run([PY, "-X", "utf8", str(REPO / "skills/orchestrator/scripts/task_packager.py"),
+    r = run([PY, "-X", "utf8", str(REPO / "skills/engineering-agent/scripts/task_packager.py"),
              "validate", str(td / "main.json"), "--strict", "--tasks-dir", str(td)])
     check("task/reaudit/blocked-dependency-rejected", r.returncode != 0)
     dep["metadata"]["status"] = "done"; write(td / "dep.json", json.dumps(dep, ensure_ascii=False))
-    r = run([PY, "-X", "utf8", str(REPO / "skills/orchestrator/scripts/task_packager.py"),
+    r = run([PY, "-X", "utf8", str(REPO / "skills/engineering-agent/scripts/task_packager.py"),
              "validate", str(td / "main.json"), "--strict", "--tasks-dir", str(td)])
     check("task/reaudit/done-dependency-accepted", r.returncode == 0, r.stdout[-300:])
     noind = json.loads(json.dumps(main)); noind["dependencies"] = []
     noind["task_id"] = "T-NOIND"
     noind["acceptance_criteria"][0].update({"independent_review": False, "severity": "major"})
     write(td / "noind.json", json.dumps(noind, ensure_ascii=False))
-    r = run([PY, "-X", "utf8", str(REPO / "skills/orchestrator/scripts/task_packager.py"),
+    r = run([PY, "-X", "utf8", str(REPO / "skills/engineering-agent/scripts/task_packager.py"),
              "validate", str(td / "noind.json"), "--strict"])
     check("task/reaudit/no-independent-review-rejected", r.returncode != 0)
 

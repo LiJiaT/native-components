@@ -4,7 +4,7 @@
 
 用法：
   python tools/install.py --list
-  python tools/install.py --component orchestrator --component grill-me-with-doc
+  python tools/install.py --component engineering-agent-skill --component grill-me-with-doc
   python tools/install.py --type skill --type agent
   python tools/install.py --all --dry-run
   python tools/install.py --rollback ~/.claude/install-manifest-<txid>.json
@@ -76,7 +76,8 @@ def target_paths(comp, claude_home, project_slug):
     if _sandbox(comp):
         base = h / "test-sandbox"
         if typ == "skill":
-            return [(p, base / "skills" / name / p.relative_to(src)) for p in iter_files(src)]
+            return [(p, base / "skills" / comp.get("install_dir", name) / p.relative_to(src))
+                    for p in iter_files(src)]
         if typ == "agent":
             return [(src, base / "agents" / src.name)]
         if typ == "rule":
@@ -102,7 +103,7 @@ def target_paths(comp, claude_home, project_slug):
             return [(src, base / "docs" / src.name)]
         return []
     if typ == "skill":
-        base = h / "skills" / name
+        base = h / "skills" / comp.get("install_dir", name)
         return [(p, base / p.relative_to(src)) for p in iter_files(src)]
     if typ == "agent":
         return [(src, h / "agents" / src.name)]

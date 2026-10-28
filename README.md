@@ -12,7 +12,7 @@ AI Native 工程流程的可复用基础组件库。组件按类型分目录存�
 
 | 目录 | 放什么 | 当前内容 |
 |---|---|---|
-| [`skills/`](skills/README.md) | Agent Skill（Claude Code 等） | `assetize`、`asset-ai-ize`、`ai-infra-feedback`、`orchestrator`、`grill-me-with-doc`、`session-distiller` |
+| [`skills/`](skills/README.md) | Agent Skill（Claude Code 等） | `assetize`、`asset-ai-ize`、`ai-infra-feedback`、`engineering-agent`、`grill-me-with-doc`、`session-distiller` |
 | [`flows/`](flows/README.md) | 多组件编排的端到端流程 | [`self-evolution`](flows/self-evolution/README.md) |
 | [`memory/`](memory/README.md) | 可复用的 memory 条目模板与公共记忆 | `asset-taxonomy.md`；领域目录仅放真实资产 |
 | [`rules/`](rules/README.md) | 可复用的工程规则（Rule） | 5 条公共规则（R1/R3/R4/R7/R8） |
@@ -21,8 +21,8 @@ AI Native 工程流程的可复用基础组件库。组件按类型分目录存�
 | [`tools/`](tools/install.py) | 安装、备份、回滚 | `install.py` |
 | [`samples/`](samples/README.md) | 仅用于流程验证的 synthetic 样例 | `synthetic/dft/*`（test-only，不安装） |
 | [`prompts/`](prompts/README.md) | 可复用的提示词模板（Prompt） | 待补充 |
-| [`hooks/`](hooks/README.md) | 确定性钩子脚本与配置示例（Hook） | `orchestrator`、`self-evolve` |
-| [`agents/`](agents/README.md) | 子代理定义（Agent） | `orchestrator` |
+| [`hooks/`](hooks/README.md) | 确定性钩子脚本与配置示例（Hook） | `engineering-agent`、`self-evolve` |
+| [`agents/`](agents/README.md) | 子代理定义（Agent） | `engineering-agent` |
 | [`env/`](env/README.md) | 本机 AI 开发环境快照（原 `claude-code-env`） | `agents`/`rules`/`skills`/`hooks`/`scenarios` |
 | [`docs/`](docs/README.md) | 使用指南、设计说明、规范链接 | [领域目录映射](docs/domain-taxonomy.md)；[agent 环境笔记](docs/agent-env/README.md) |
 
@@ -32,9 +32,9 @@ AI Native 工程流程的可复用基础组件库。组件按类型分目录存�
 
 | 组件 | 类型 | 作用 |
 |---|---|---|
-| [`orchestrator`](agents/orchestrator.md) | Agent | 复杂任务的统一入口与调度层：澄清、规划、分解分发、验收、写回 |
-| [`orchestrator`](skills/orchestrator/SKILL.md) | Skill | agent 的入口垫片与支撑资源（references / `task_packager.py`） |
-| [`grill-me-with-doc`](skills/grill-me-with-doc/SKILL.md) | Skill | 六维需求澄清，作为 orchestrator 澄清阶段 |
+| [`engineering-agent`](agents/engineering-agent.md) | Agent | 复杂任务的统一入口与调度层：澄清、规划、分解分发、验收、写回 |
+| [`engineering-agent`](skills/engineering-agent/SKILL.md) | Skill | agent 的入口垫片与支撑资源（references / `task_packager.py`） |
+| [`grill-me-with-doc`](skills/grill-me-with-doc/SKILL.md) | Skill | 六维需求澄清，作为 engineering-agent 澄清阶段 |
 | [`session-distiller`](skills/session-distiller/SKILL.md) | Skill | 从历史 session 日志蒸馏可复用资产 |
 | [`self-evolution`](flows/self-evolution/README.md) | Flow | 采集 → 蒸馏 → 分诊 → 人工确认 → 晋升 → 卫生 |
 | [`assetize`](skills/assetize/SKILL.md) | Skill（A） | 原始材料 → 资产提案包 + 入库申请 |
@@ -61,7 +61,7 @@ AI Native 工程流程的可复用基础组件库。组件按类型分目录存�
 - **技能 B**：按 record 的 `ai_form` 生成 Memory / Rule / Skill / Workflow / Hook / Prompt，完成确定性校验与验收；不改资产语义、不自动发布。
 - **确定性闸门**：`validate.py`（A）、`validate_build.py`（B，`--release` 为发布层），退出码即结论。record/审批/内容 hash、范围、artifact 元数据与语法错误都会阻断。
 
-### Orchestrator
+### Engineering Agent
 
 ```text
 用户请求 → 分类（简单直接做 / 复杂走流程）
@@ -72,7 +72,7 @@ AI Native 工程流程的可复用基础组件库。组件按类型分目录存�
         → 人工验收 → 写回资产
 ```
 
-`hooks/orchestrator` 在会话启动时注入编排模式标识，在用户提交 prompt 时做复杂度预分类；两者都是上下文注入，不是审批闸门。真正的强制门禁在 `gates/gate.py`：计划/验收/外发/record/registry 校验失败关闭，`PreToolUse` 外发拦截默认拒绝。
+`hooks/engineering-agent` 在会话启动时注入编排模式标识，在用户提交 prompt 时做复杂度预分类；两者都是上下文注入，不是审批闸门。真正的强制门禁在 `gates/gate.py`：计划/验收/外发/record/registry 校验失败关闭，`PreToolUse` 外发拦截默认拒绝。
 
 ### 自进化
 
@@ -108,11 +108,11 @@ python ~/.claude/gates/gate.py install --manifest ~/.claude/install-manifest-lat
 
 安装器只落文件，不改 `settings.json`。hook 需要手动合并配置：
 
-- `hooks/orchestrator/settings.example.json` → `~/.claude/hooks/orchestrator/`
+- `hooks/engineering-agent/settings.example.json` → `~/.claude/hooks/engineering-agent/`
 - `hooks/self-evolve/settings.example.json` → `~/.claude/hooks/self-evolve/`
 - `gates/settings.example.json`（POSIX）或 `gates/settings.windows.example.json`（Windows）启用 PreToolUse 外发拦截
 
-Windows 使用 `win/*.cmd` 包装器；实际安装路径以 `registry.json` 的 `install_dir` 为准（`orchestrator-hooks` → `hooks/orchestrator`，`self-evolve-hooks` → `hooks/self-evolve`）。安装前先检查目标环境是否已有同名组件；更新时覆盖对应目录，并保留旧版本以便回滚。示例配置只包含 hooks，不含任何凭证。
+Windows 使用 `win/*.cmd` 包装器；实际安装路径以 `registry.json` 的 `install_dir` 为准（`engineering-agent-hooks` → `hooks/engineering-agent`，`self-evolve-hooks` → `hooks/self-evolve`）。安装前先检查目标环境是否已有同名组件；更新时覆盖对应目录，并保留旧版本以便回滚。示例配置只包含 hooks，不含任何凭证。
 
 ## 使用
 
@@ -120,7 +120,7 @@ Windows 使用 `win/*.cmd` 包装器；实际安装路径以 `registry.json` 的
 资产化 <材料>                     # 技能 A：产出 proposal package
 把 EA-YYYYMMDD-NN 实现成 ...       # 技能 B：产出 implementation package
 提反馈：<问题描述>                 # 反馈技能：产出结构化反馈单
-复杂任务 ...                       # orchestrator：澄清 → 规划 → 分发 → 验收
+复杂任务 ...                       # engineering-agent：澄清 → 规划 → 分发 → 验收
 蒸馏 session <id>                  # session-distiller：历史会话 → 候选资产
 ```
 

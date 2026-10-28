@@ -6,7 +6,7 @@
 
 | 目录 | 事件 | 作用 |
 |---|---|---|
-| [`orchestrator`](orchestrator/README.md) | `SessionStart` / `UserPromptSubmit` | 注入编排模式标识、做复杂度预分类 |
+| [`engineering-agent`](engineering-agent/README.md) | `SessionStart` / `UserPromptSubmit` | 注入编排模式标识、做复杂度预分类 |
 | [`self-evolve`](self-evolve/README.md) | `SessionEnd` / `SessionStart` | `enqueue.py` 安全入队（无 eval）、提醒待确认候选、跨日唤醒 |
 
 ## 要求

@@ -93,7 +93,7 @@ D1–D6 全部 YES
 
 ### Step 2 · 出题 + 建草稿（同一动作）
 
-**先建草稿再出题**：写 `reports/<task>/clarification.md`（`round: 0`、`status: drafting`），把已查到的六维理解填进去。然后按此格式出题：
+**先建草稿再出题**：写 `reports/<task>/clarification.md`（`round: 0`、`status: drafting`、**`verdict: need-confirmation`**），把已查到的六维理解填进去。草稿期的 `verdict` 统一填 `need-confirmation`（表示“未收敛”），收到回答后再按 Step 3 改成 `proceed` / `need-confirmation` / `blocked`；**不要留空，也不要在尚未耗尽 2 轮时先用 `blocked`。** 然后按此格式出题：
 
 ```
 ## 需求澄清（第 1/2 轮）
@@ -214,7 +214,13 @@ acceptance: [ {id, check_method, expected, evidence} ]
 human_gates: [……]
 ```
 
-状态取值：六维 = `明确` / `待确认` / `授权` / `不适用`；`verdict` = `proceed` / `need-confirmation` / `blocked`；`round` ∈ {0,1,2}。
+状态取值（**全部只能取下列单词，不得自造或附加括号说明**；解释写到「现状/结论」列）：
+
+- 六维状态 = `明确` / `待确认` / `授权` / `不适用`（必须取单一值，不得写「授权/待确认」；一维同时存在两种情况时按更保守的定状态）
+- `status` = `drafting` / `waiting` / `answered` / `blocked` / `closed`（**没有 `asked`、`done` 等变体**）
+- `verdict` = `proceed` / `need-confirmation` / `blocked`
+- §2「类型」列 = `阻塞` / `非阻塞`（不得写「非阻塞（理解确认）」这类复合值，补充说明放「现状」列）
+- `round` ∈ {0,1,2}
 
 ## 5. 落盘合格判定（8 条，缺一不可）
 

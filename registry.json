@@ -67,7 +67,7 @@
       "owner": "AI 平台团队",
       "interface": "D1–D6 六问判定（目标/约束/输入/输出/边界/验证标准）决定是否澄清；触发时落盘 reports/<task>/clarification.md；由 engineering-agent 澄清阶段调用",
       "dependencies": [],
-      "version": "1.1.0",
+      "version": "1.1.2",
       "status": "active",
       "path": "skills/grill-me-with-doc",
       "install_target": "user-global"

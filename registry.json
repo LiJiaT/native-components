@@ -91,13 +91,13 @@
       "name": "engineering-agent",
       "type": "agent",
       "owner": "AI 平台团队",
-      "interface": "Claude Code subagent：接收复杂任务，按五步流程委派与验收；Step 1 按 D1–D6 判定并在澄清时强制产出 clarification.md，计划以 requirement_card 引用；model 固定 DeepSeek-V4.1-Flash（inherit 在本环境不可解析）；依赖 engineering-agent skill",
+      "interface": "Claude Code subagent：接收复杂任务，按五步流程委派与验收；Step 1 按 D1–D6 判定并在澄清时强制产出 clarification.md，计划以 requirement_card 引用；frontmatter 不写 model（该字段可选，inherit 在本环境不可解析，缺省即用平台默认）；依赖 engineering-agent skill",
       "dependencies": [
         "engineering-agent-skill",
         "grill-me-with-doc",
         "external:claude-code"
       ],
-      "version": "2.1.1",
+      "version": "2.1.2",
       "status": "active",
       "path": "agents/engineering-agent.md",
       "install_target": "user-global"

@@ -1,6 +1,6 @@
 {
   "schema_version": "1",
-  "updated_at": "2026-10-27",
+  "updated_at": "2026-10-29",
   "components": [
     {
       "name": "assetize",
@@ -49,13 +49,13 @@
       "name": "engineering-agent-skill",
       "type": "skill",
       "owner": "AI 平台团队",
-      "interface": "复杂任务编排入口：分类→澄清→计划→任务包→验收→写回；scripts/task_packager.py validate --strict",
+      "interface": "复杂任务编排入口：分类→澄清→计划→任务包→验收→写回；Step 1 澄清结果落 reports/<task>/clarification.md 并被计划以 requirement_card 引用；scripts/task_packager.py validate --strict",
       "dependencies": [
         "grill-me-with-doc",
         "task-packager",
         "external:claude-code"
       ],
-      "version": "2.0.0",
+      "version": "2.1.0",
       "status": "active",
       "path": "skills/engineering-agent",
       "install_dir": "engineering-agent",
@@ -65,9 +65,9 @@
       "name": "grill-me-with-doc",
       "type": "skill",
       "owner": "AI 平台团队",
-      "interface": "六维需求澄清模板（目标/约束/输入/输出/边界/验证标准），由 engineering-agent 澄清阶段调用",
+      "interface": "D1–D6 六问判定（目标/约束/输入/输出/边界/验证标准）决定是否澄清；触发时落盘 reports/<task>/clarification.md；由 engineering-agent 澄清阶段调用",
       "dependencies": [],
-      "version": "1.0.0",
+      "version": "1.1.0",
       "status": "active",
       "path": "skills/grill-me-with-doc",
       "install_target": "user-global"
@@ -91,13 +91,13 @@
       "name": "engineering-agent",
       "type": "agent",
       "owner": "AI 平台团队",
-      "interface": "Claude Code subagent：接收复杂任务，按五步流程委派与验收；依赖 engineering-agent skill",
+      "interface": "Claude Code subagent：接收复杂任务，按五步流程委派与验收；Step 1 按 D1–D6 判定并在澄清时强制产出 clarification.md，计划以 requirement_card 引用；依赖 engineering-agent skill",
       "dependencies": [
         "engineering-agent-skill",
         "grill-me-with-doc",
         "external:claude-code"
       ],
-      "version": "2.0.0",
+      "version": "2.1.0",
       "status": "active",
       "path": "agents/engineering-agent.md",
       "install_target": "user-global"

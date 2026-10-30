@@ -48,19 +48,19 @@ DOC_LINKS = {
 
 
 def resolve_key():
-    """解析 API key：优先环境变量 ARK_API_KEY，其次从 ~/.zshrc 提取。"""
-    key = os.environ.get("ARK_API_KEY", "").strip()
+    """解析 API key：优先 ARK_API_KEY，兼容旧变量名 VLCES_API_KEY，最后从 ~/.zshrc 提取。"""
+    key = (os.environ.get("ARK_API_KEY") or os.environ.get("VLCES_API_KEY") or "").strip()
     if key:
         return key
     try:
         with open(ZSHRC, encoding="utf-8", errors="ignore") as f:
             for line in f:
-                m = re.match(r'\s*(?:export\s+)?ARK_API_KEY=["\']?([^"\'\s]+)', line)
+                m = re.match(r'\s*(?:export\s+)?(?:ARK_API_KEY|VLCES_API_KEY)=["\']?([^"\'\s]+)', line)
                 if m:
                     return m.group(1).strip()
     except OSError:
         pass
-    die("找不到 API key：环境变量 ARK_API_KEY 未设置，且 ~/.zshrc 中无此定义")
+    die("找不到 API key：环境变量 ARK_API_KEY（或旧名 VLCES_API_KEY）未设置，且 ~/.zshrc 中无此定义")
 
 
 def die(msg, code=1):

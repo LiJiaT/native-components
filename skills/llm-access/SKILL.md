@@ -23,7 +23,7 @@ python3 $S stream '讲个故事'                     # 流式逐字输出
 ## 核心事实（都是踩过坑的）
 
 1. **端点是 `https://ark.cn-beijing.volces.com/api/plan`**，Agent Plan 套餐专用。通用的 `/api/v3` 会返回 `AuthenticationError`——key 本身没问题，是端点不对。
-2. **认证**：key 在环境变量 `ARK_API_KEY`（定义于 `~/.zshrc`），CLI 会自动解析（环境变量优先，兜底读 zshrc）。`x-api-key` 和 `Authorization: Bearer` 都能用。
+2. **认证**：key 在环境变量 `ARK_API_KEY`（旧名 `VLCES_API_KEY` 仍兼容；Windows 写在用户环境变量，macOS/Linux 可在 `~/.zshrc`），CLI 会自动解析（环境变量优先，兜底读 zshrc）。`x-api-key` 和 `Authorization: Bearer` 都能用。
 3. **所有模型强制思考，不可关闭**（`thinking.type: disabled` 会报 `InvalidParameter`）。思考也消耗 `max_tokens`，所以：
    - `max_tokens` 给足：短问答 ≥512，正式任务 ≥1024，长输出 ≥2048
    - 解析响应只取 `type=="text"` 的内容块，`thinking` 块要跳过

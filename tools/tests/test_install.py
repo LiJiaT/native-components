@@ -71,6 +71,17 @@ def main():
         gate_rels = [str(dst.relative_to(home)).replace("\\", "/")
                      for _, dst in inst.target_paths(reg["gate-core"], home, None)]
         check("gate 安装含 registry 快照", "gates/registry.json" in gate_rels, gate_rels)
+        prompt_rels = [str(dst.relative_to(home)).replace("\\", "/")
+                       for _, dst in inst.target_paths(reg["system-prompt-starter"], home, None)]
+        check("prompt 装到 prompts/<name>.md",
+              prompt_rels == ["prompts/system-prompt-starter.md"], prompt_rels)
+        fake_prompt = {"name": "sample-prompt", "type": "prompt",
+                       "path": "prompts/system-prompt-starter.md",
+                       "status": "test-only", "install_target": "test-sandbox"}
+        fake_rels = [str(dst.relative_to(home)).replace("\\", "/")
+                     for _, dst in inst.target_paths(fake_prompt, home, None)]
+        check("prompt sandbox 落 test-sandbox/prompts",
+              fake_rels == ["test-sandbox/prompts/system-prompt-starter.md"], fake_rels)
 
         full = run([REPO / "tools/install.py", "--claude-home", home,
                     "--project-slug", "synthetic-project", "--all"])
@@ -200,6 +211,19 @@ def main():
         state = json.load(open(home / "install-state.json", encoding="utf-8"))
         check("unchanged 回滚恢复前序安装状态",
               "rule-no-auto-external-actions" in state.get("components", {}), state)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        home = Path(tmp)
+        r = run([REPO / "tools/install.py", "--claude-home", home,
+                 "--component", "system-prompt-starter"])
+        check("prompt 安装成功", r.returncode == 0, r.stderr[-200:])
+        target = home / "prompts/system-prompt-starter.md"
+        check("prompt 安装副本与源一致",
+              target.is_file() and sha(target) == sha(REPO / "prompts/system-prompt-starter.md"))
+        m = json.load(open(latest(home), encoding="utf-8"))
+        actions = m["components"][0]["actions"]
+        check("prompt 新建记为 created",
+              actions.get("prompts/system-prompt-starter.md") == "created", actions)
 
     if FAILS:
         print(f"FAILED: {len(FAILS)}")

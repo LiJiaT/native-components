@@ -1,6 +1,6 @@
 {
   "schema_version": "1",
-  "updated_at": "2026-10-29",
+  "updated_at": "2026-10-30",
   "components": [
     {
       "name": "assetize",
@@ -55,7 +55,7 @@
         "task-packager",
         "external:claude-code"
       ],
-      "version": "2.1.0",
+      "version": "2.1.1",
       "status": "active",
       "path": "skills/engineering-agent",
       "install_dir": "engineering-agent",
@@ -241,7 +241,7 @@
       "dependencies": [
         "external:python3"
       ],
-      "version": "2.2.0",
+      "version": "2.2.1",
       "status": "active",
       "path": "skills/engineering-agent/scripts/task_packager.py",
       "install_target": "user-global"

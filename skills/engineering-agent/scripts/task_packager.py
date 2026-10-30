@@ -168,6 +168,17 @@ def _type_name(v):
     return type(v).__name__
 
 
+def _str_deps(value):
+    """只返回字符串依赖元素。
+
+    形状错误（非 list / 对象元素）由 _validate_shape 报；这里只做防崩归一化，
+    避免 _validate_strict 的 set() 与 check_dag 的 startswith 因对象元素抛异常。
+    """
+    if not isinstance(value, list):
+        return []
+    return [d for d in value if isinstance(d, str)]
+
+
 def _validate_shape(pkg, errors):
     """类型/结构检查；不依赖 strict，任何调用方都不该拿到形状错误的任务包。"""
     if not _nonempty_str(pkg.get("task_id")):
@@ -190,7 +201,7 @@ def _validate_shape(pkg, errors):
 
     deps = pkg.get("dependencies")
     if not isinstance(deps, list) or not all(isinstance(x, str) and x.strip() for x in deps):
-        errors.append("dependencies 必须是非空字符串列表（可为空列表）")
+        errors.append("dependencies 必须是字符串列表，且每项非空（当前不支持对象形式；对象化见 T06 后续批次）")
 
     oc = pkg.get("output_contract")
     if not isinstance(oc, dict):
@@ -205,6 +216,9 @@ def _validate_shape(pkg, errors):
                     errors.append(f"output_contract.primary.{key} 必须是非空字符串")
         if not isinstance(oc.get("must_not_include", []), list):
             errors.append("output_contract.must_not_include 必须是列表")
+        ra = oc.get("required_artifacts")
+        if ra is not None and (not isinstance(ra, list) or not ra or not all(_nonempty_str(x) for x in ra)):
+            errors.append("output_contract.required_artifacts 若存在，必须是非空字符串列表")
 
     ac = pkg.get("acceptance_criteria")
     if not isinstance(ac, list):
@@ -289,7 +303,7 @@ def _validate_strict(pkg, errors, base_dir, tasks_dir=None):
         errors.append(f"metadata.status 必须是 {sorted(TASK_STATUS)} 之一")
 
     task_id = pkg.get("task_id")
-    deps = pkg.get("dependencies") or []
+    deps = _str_deps(pkg.get("dependencies"))
     if task_id in deps:
         errors.append("dependencies 不得包含自身 task_id（自依赖）")
     if len(deps) != len(set(deps)):
@@ -360,14 +374,14 @@ def check_dag(pkg, tasks_dir, errors):
     if dup:
         errors.append(f"任务 ID 重复: {dup}")
     ids = set(all_tasks) | {pkg.get("task_id")}
-    graph = {pkg.get("task_id"): list(pkg.get("dependencies") or [])}
+    graph = {pkg.get("task_id"): _str_deps(pkg.get("dependencies"))}
     for tid in all_tasks:
         try:
             t = json.load(open(os.path.join(tasks_dir, all_tasks[tid][0]), encoding="utf-8"))
-            graph[tid] = list(t.get("dependencies") or [])
+            graph[tid] = _str_deps(t.get("dependencies"))
         except Exception:
             pass
-    for d in pkg.get("dependencies") or []:
+    for d in _str_deps(pkg.get("dependencies")):
         if d.startswith("external:"):
             continue
         if d not in all_tasks:

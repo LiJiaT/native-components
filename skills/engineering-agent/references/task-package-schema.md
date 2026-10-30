@@ -13,11 +13,7 @@
 
   "input": {
     "files": [
-      {
-        "path": "文件路径或 URL",
-        "role": "spec|reference|data|template",
-        "format": "markdown|json|python|xlsx|..."
-      }
+      "文件路径或 URL（字符串数组；如需标注角色/格式，写在 description 里）"
     ],
     "data": {
       "key": "直接提供的结构化数据"
@@ -27,13 +23,8 @@
   },
 
   "dependencies": [
-    {
-      "task_id": "T000",
-      "type": "hard|soft",
-      "output_mapping": {
-        "源输出字段": "本任务输入字段"
-      }
-    }
+    "T000",
+    "external:lark-cli"
   ],
 
   "output_contract": {
@@ -51,6 +42,9 @@
     ],
     "must_not_include": [
       "不应出现在输出中的内容（如全局上下文、其他任务信息）"
+    ],
+    "required_artifacts": [
+      "out/report.md"
     ]
   },
 
@@ -58,15 +52,18 @@
     {
       "id": "AC-01",
       "description": "验收项描述",
-      "check_method": "auto|manual|semiauto",
-      "check_script": "自动检查脚本路径（如适用）",
+      "expected": "可观察的期望结果（结果侧逐字比对）",
+      "evidence_path": "证据落点：文件/日志（不得是目录）",
+      "check_method": "auto|manual",
+      "check_script": "自动检查脚本路径（check_method=auto 时必填）",
+      "independent_review": true,
       "severity": "blocker|major|minor"
     }
   ],
 
   "failure_handling": {
     "max_retries": 2,
-    "retry_strategy": "same_executor|different_executor|escalate",
+    "retry_strategy": "same_executor|new_executor|escalate|none",
     "fallback_task": "失败后执行的降级任务 ID（可选）",
     "escalation_trigger": "连续失败 N 次或出现特定错误类型时升级",
     "escalation_target": "engineering-agent|human"
@@ -88,6 +85,8 @@
     "created_by": "engineering-agent",
     "priority": "high|medium|low",
     "estimated_complexity": "low|medium|high",
+    "task_class": "deterministic|judgment",
+    "status": "todo|running|done|failed|blocked",
     "tags": ["标签1", "标签2"]
   }
 }
@@ -105,12 +104,16 @@
 | `verification` | 验证阶段 | 测试、审查、验收检查 |
 | `writeback` | 写回阶段 | 资产沉淀、规则更新、记忆写入 |
 
-### dependencies.type
+### dependencies 写法
 
-| 值 | 含义 |
-|----|------|
-| `hard` | 硬依赖：必须等前置任务完成且通过验收才能开始 |
-| `soft` | 软依赖：可以并行启动，但最终交付前必须满足依赖 |
+`dependencies` 是**任务 ID 字符串数组**，只表达顺序：
+
+| 写法 | 含义 | 校验 |
+|---|---|---|
+| `"T000"` | 内部依赖：必须存在且状态为 `done` 才可派发（校验时需 `--tasks-dir`） | 自依赖、重复、断链、环都会报错 |
+| `"external:lark-cli"` | 外部依赖：不查任务目录 | 前缀 `external:` |
+
+对象形式（`{task_id, type: hard\|soft, output_mapping}`）**当前不支持**，见文末「未实现」。
 
 ### execution.type 选择优先级
 
@@ -127,39 +130,81 @@
 
 | 值 | 含义 | 适用场景 |
 |----|------|---------|
-| `auto` | 完全自动化检查 | 文件存在性、格式校验、语法检查、数值比对 |
-| `semiauto` | 半自动化 + 人工确认 | 脚本检查 + 人工抽样确认 |
+| `auto` | 完全自动化检查（必须提供 `check_script`） | 文件存在性、格式校验、语法检查、数值比对 |
 | `manual` | 纯人工检查 | 设计质量、内容准确性、风格一致性 |
 
-## 最小任务包
+需要“先跑脚本再人工确认”的，拆成两条 AC：一条 `auto` + 一条 `manual`（`semiauto` 当前不支持，见文末「未实现」）。
 
-对于简单子任务，可以只填必要字段：
+## 最小任务包（能通过 --strict）
+
+下面这份是**真能过 `validate --strict`** 的最小集合；少一个 `expected` / `evidence_path` / `independent_review` / `metadata.task_class` 都会被拒。
 
 ```json
 {
   "task_id": "T001",
   "name": "读取并分析文件 X",
   "description": "读取指定文件并提取关键信息",
+  "phase": "execution",
   "input": {
-    "files": [{"path": "/path/to/file.md", "role": "data"}]
+    "files": ["/path/to/file.md"],
+    "data": {},
+    "context_summary": "为什么要读这个文件，以及不能违反的约束"
   },
+  "dependencies": [],
   "output_contract": {
     "primary": {
       "type": "text",
       "format": "markdown",
       "location": "直接在回复中输出"
-    }
+    },
+    "must_not_include": []
   },
   "acceptance_criteria": [
-    {"id": "AC-01", "description": "提取了所有关键信息点", "check_method": "manual", "severity": "major"}
+    {
+      "id": "AC-01",
+      "description": "提取了所有关键信息点",
+      "expected": "每个章节的关键结论都有一行摘要",
+      "evidence_path": "out/ac-01.md",
+      "check_method": "manual",
+      "independent_review": true,
+      "severity": "major"
+    }
   ],
+  "failure_handling": {
+    "max_retries": 2,
+    "retry_strategy": "same_executor",
+    "escalation_target": "engineering-agent"
+  },
   "execution": {
     "type": "sub-agent",
+    "target": "engineering-agent",
     "model": "DeepSeek-V4-Flash-Official",
     "timeout_seconds": 120
+  },
+  "metadata": {
+    "created_at": "2026-10-30T00:00:00Z",
+    "created_by": "engineering-agent",
+    "priority": "medium",
+    "estimated_complexity": "low",
+    "task_class": "judgment",
+    "status": "todo",
+    "tags": []
   }
 }
 ```
+
+注意：`required_artifacts` **要么不写，要么写非空字符串列表**；写 `[]` 会被拒。
+
+## 未实现（不要照抄）
+
+下列写法曾在历史文档里出现，**当前 `validate` 不支持**，照抄会被拒；本轮不实现，留待后续批次（见 `reports/06-dispatch/recommendation.md`）。
+
+| 写法 | 当前行为 | 该怎么写 |
+|---|---|---|
+| `input.files` 为对象数组 `{path, role, format}` | 报 `input.files 必须是字符串列表` | 直接写路径字符串数组；角色/格式写进 `description` |
+| `dependencies` 为对象数组 `{task_id, type, output_mapping}` | 报 `dependencies 必须是字符串列表，且每项非空（当前不支持对象形式…）` | 写任务 ID 字符串数组；外部依赖用 `external:` 前缀 |
+| `check_method: semiauto` | 报 `check_method 非法` | 拆成两条 AC：一条 `auto` + 一条 `manual` |
+| `retry_strategy: different_executor` | 报 `retry_strategy 非法` | 用 `new_executor` |
 
 ## 任务包创建原则
 

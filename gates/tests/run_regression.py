@@ -425,6 +425,39 @@ def main():
         {"check_method": "auto", "check_script": "pythonMISSING_DOES_NOT_EXIST.py"}))
     tp_check("valid", lambda p: None, expect_ok=True)
 
+    # P1 补丁：依赖形状防崩 + required_artifacts 类型
+    def tp_cli(name, mutate, extra=None):
+        pkg = json.loads(json.dumps(tp_base)); mutate(pkg)
+        p = TMP / f"tp-cli-{name}.json"; write(p, json.dumps(pkg, ensure_ascii=False))
+        return run([PY, "-X", "utf8", str(REPO / "skills/engineering-agent/scripts/task_packager.py"),
+                    "validate", str(p), "--strict"] + (extra or []))
+    r = tp_cli("deps-object", lambda p: p.update({"dependencies": [{"task_id": "T-X", "type": "hard"}]}))
+    check("task/deps-object-readable",
+          r.returncode != 0 and "dependencies" in r.stdout and "Traceback" not in r.stderr,
+          (r.stdout + r.stderr)[-300:])
+    r = tp_cli("deps-object-tasks-dir", lambda p: p.update({"dependencies": [{"task_id": "T-X"}]}),
+               extra=["--tasks-dir", str(TMP)])
+    check("task/deps-object-tasks-dir-no-traceback",
+          r.returncode != 0 and "Traceback" not in r.stderr, (r.stdout + r.stderr)[-300:])
+    r = tp_cli("deps-external-ok", lambda p: p.update({"dependencies": ["external:lark-cli"]}))
+    check("task/deps-external-ok", r.returncode == 0, r.stdout[-300:])
+    r = tp_cli("files-object", lambda p: p["input"].update({"files": [{"path": "a.md"}]}))
+    check("task/files-object-readable", r.returncode != 0 and "input.files" in r.stdout, r.stdout[-200:])
+    r = tp_cli("semiauto", lambda p: p["acceptance_criteria"][0].update({"check_method": "semiauto"}))
+    check("task/semiauto-readable", r.returncode != 0 and "check_method" in r.stdout, r.stdout[-200:])
+    r = tp_cli("different-executor",
+               lambda p: p["failure_handling"].update({"retry_strategy": "different_executor"}))
+    check("task/different-executor-readable",
+          r.returncode != 0 and "retry_strategy" in r.stdout, r.stdout[-200:])
+    r = tp_cli("required-artifacts-ok",
+               lambda p: p["output_contract"].update({"required_artifacts": ["out/rpt.md"]}))
+    check("task/required-artifacts-ok", r.returncode == 0, r.stdout[-300:])
+    for i, val in enumerate([[], [""], "out.txt", {"path": "x"}]):
+        r = tp_cli(f"required-artifacts-bad-{i}",
+                   lambda p, v=val: p["output_contract"].update({"required_artifacts": v}))
+        check(f"task/required-artifacts-bad-{i}",
+              r.returncode != 0 and "required_artifacts" in r.stdout, r.stdout[-200:])
+
     print("[4] 自进化入队 / worker")
     home = TMP / "home"; (home / ".claude/self-evolve/queue").mkdir(parents=True)
     env = {"HOME": str(home), "USERPROFILE": str(home)}

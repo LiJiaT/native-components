@@ -723,6 +723,164 @@ def _required_artifacts(task):
     return sorted(set(out))
 
 
+REVIEW_MODEL = "GLM-5.3"
+REVIEW_DIMENSIONS = ("goal_alignment", "completeness", "correctness",
+                     "consistency", "boundaries", "format")
+
+
+def _needs_independent_review(task):
+    for c in task.get("acceptance_criteria") or []:
+        if (isinstance(c, dict)
+                and c.get("independent_review") is True
+                and c.get("severity") in ("blocker", "major")):
+            return True
+    return False
+
+
+def _normalize_rel(value):
+    return str(Path(value)).replace("\\", "/")
+
+
+def _review_reason_ok(text):
+    if not nonempty(text) or len(text.strip()) < 4:
+        return False
+    return text.strip().lower() not in {
+        "通过", "没问题", "pass", "ok", "okay", "good", "fine"
+    }
+
+
+def _visible_path_forbidden(path):
+    low = _normalize_rel(path).lower()
+    return ("self-review" in low or "self_review" in low
+            or "evidence/" in low or "prompts/" in low
+            or "logs/" in low or "executor" in low)
+
+
+def _visible_pairs(items, label):
+    if not isinstance(items, list) or not items:
+        die(f"{label} 为空")
+    pairs = []
+    for item in items:
+        if (not isinstance(item, dict)
+                or not nonempty(item.get("path"))
+                or not nonempty(item.get("sha256"))):
+            die(f"{label} 项缺 path/sha256")
+        rel = _normalize_rel(item["path"])
+        digest = str(item["sha256"])
+        if _visible_path_forbidden(rel):
+            die(f"{label} 包含执行方推理/证据文件: {rel}")
+        if not re.fullmatch(r"[0-9a-f]{64}", digest):
+            die(f"{label} {rel} 的 sha256 不是 64 位小写十六进制")
+        pairs.append((rel, digest))
+    return pairs
+
+
+def _check_visible_files(items, base, label):
+    pairs = _visible_pairs(items, label)
+    for rel, digest in pairs:
+        _check_file_hash(_resolve(base, rel), digest, f"{label} {rel}")
+    return pairs
+
+
+def _has_digest(pairs, digest):
+    return any(item[1] == digest for item in pairs)
+
+
+def _validate_review(d, base, art, required):
+    review_rel = d.get("review_artifact")
+    if not required and review_rel is None:
+        return
+    reviewer_model = d.get("reviewer_model")
+    if not nonempty(reviewer_model):
+        die("acceptance 缺 reviewer_model（blocker/major 必须独立复核）")
+    if reviewer_model != REVIEW_MODEL:
+        die(f"acceptance.reviewer_model 必须是 {REVIEW_MODEL}")
+    if not isinstance(review_rel, dict):
+        die("acceptance 缺 review_artifact（blocker/major 必须独立复核）")
+    if not nonempty(review_rel.get("path")) or not nonempty(review_rel.get("sha256")):
+        die("acceptance.review_artifact 缺 path/sha256")
+    review_path = _resolve(base, review_rel["path"])
+    _check_file_hash(review_path, review_rel["sha256"], "review_artifact")
+    try:
+        review = json.load(open(review_path, encoding="utf-8"))
+    except Exception as e:
+        die(f"review.json 解析失败: {e}")
+    check_schema("review.schema.json", review, "review")
+
+    if review.get("task_id") != d.get("task_id"):
+        die("review.task_id 与 acceptance 不一致")
+    if review.get("task_package_sha256") != d.get("task_package_sha256"):
+        die("review.task_package_sha256 与 acceptance 不一致")
+    if review.get("reviewer") != d.get("reviewer"):
+        die("review.reviewer 与 acceptance 不一致")
+    if review.get("reviewer_run_id") != d.get("reviewer_run_id"):
+        die("review.reviewer_run_id 与 acceptance 不一致")
+    if review.get("reviewer_model") != reviewer_model:
+        die("review.reviewer_model 与 acceptance 不一致")
+    if not valid_date(review.get("reviewed_at")):
+        die("review.reviewed_at 不是有效日期")
+
+    reviewed = review.get("reviewed_artifact") or {}
+    reviewed_rel = _normalize_rel(reviewed.get("path") or "")
+    art_norm = {_normalize_rel(key): value for key, value in art.items()}
+    if reviewed_rel not in art_norm:
+        die(f"review.reviewed_artifact.path 未在 acceptance.artifact_sha256 中: {reviewed_rel}")
+    if reviewed.get("sha256") != art_norm[reviewed_rel]:
+        die("review.reviewed_artifact.sha256 与 acceptance.artifact_sha256 不一致")
+
+    review_criteria = {c.get("id"): c for c in review.get("criteria") or []
+                       if isinstance(c, dict) and c.get("id")}
+    accept_criteria = {c.get("id"): c for c in d.get("criteria") or []
+                       if isinstance(c, dict) and c.get("id")}
+    if set(review_criteria) != set(accept_criteria):
+        die(f"review.criteria 与 acceptance.criteria 不一致: "
+            f"结果={sorted(accept_criteria)} review={sorted(review_criteria)}")
+    for cid, ac in accept_criteria.items():
+        rc = review_criteria[cid]
+        if rc.get("result") != ac.get("result"):
+            die(f"review.criteria[{cid}].result 与 acceptance 不一致")
+        if not _review_reason_ok(rc.get("reason")):
+            die(f"review.criteria[{cid}].reason 过于笼统")
+        if not nonempty(rc.get("evidence")):
+            die(f"review.criteria[{cid}].evidence 为空")
+    if review.get("verdict") != d.get("verdict"):
+        die("review.verdict 与 acceptance.verdict 不一致")
+
+    visible = _check_visible_files(d.get("reviewer_visible_inputs"), base,
+                                   "acceptance.reviewer_visible_inputs")
+    if not _has_digest(visible, str(d.get("task_package_sha256"))):
+        die("reviewer_visible_inputs 未包含任务包")
+    if not _has_digest(visible, str(reviewed.get("sha256"))):
+        die("reviewer_visible_inputs 未包含被复核产物")
+
+    review_visible = _visible_pairs(review.get("visible_inputs"), "review.visible_inputs")
+    visible_hashes = {digest for _, digest in visible}
+    for rel, digest in review_visible:
+        if digest not in visible_hashes:
+            die(f"review.visible_inputs 与 acceptance.reviewer_visible_inputs 不一致: {rel}")
+    if not _has_digest(review_visible, str(d.get("task_package_sha256"))):
+        die("review.visible_inputs 未包含任务包")
+    if not _has_digest(review_visible, str(reviewed.get("sha256"))):
+        die("review.visible_inputs 未包含被复核产物")
+
+
+def _validate_self_review_dimensions(self_review):
+    dims = self_review.get("dimensions")
+    if not isinstance(dims, dict):
+        die("self_review 缺 dimensions（六维自查）")
+    for key in REVIEW_DIMENSIONS:
+        item = dims.get(key)
+        if not isinstance(item, dict):
+            die(f"self_review.dimensions 缺 {key}")
+        result = item.get("result")
+        if result not in ("pass", "fail", "blocked"):
+            die(f"self_review 维度 {key} result 非法: {result!r}")
+        if not nonempty(item.get("reason")):
+            die(f"self_review 维度 {key} 缺 reason")
+        if result != "pass":
+            die(f"self_review 维度 {key} 未通过: {result}")
+
+
 def cmd_acceptance(args):
     set_audit_context(rule="acceptance", input_hash=sha256_raw(Path(args.file)), require_audit=True)
     try:
@@ -798,6 +956,9 @@ def cmd_acceptance(args):
         if str(_resolve(base, rel).resolve()) not in review_paths:
             die(f"reviewer_inputs 未包含产物 {rel}（复核输入不完整）")
 
+    needs_review = _needs_independent_review(task)
+    _validate_review(d, base, art, needs_review)
+
     for c in crit:
         for k in ("expected", "evidence_path", "result", "evidence_sha256"):
             if not c.get(k):
@@ -834,6 +995,7 @@ def cmd_acceptance(args):
     _check_file_hash(self_path, self_review["evidence_sha256"], "self_review")
     if str(self_path.resolve()) not in review_paths:
         die("reviewer_inputs 未包含自查记录")
+    _validate_self_review_dimensions(self_review)
     for finding in self_review.get("findings") or []:
         fid = finding.get("id", "?")
         if finding.get("disposition") in (None, "", "open"):

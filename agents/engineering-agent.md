@@ -30,7 +30,7 @@ description: "用户级工程智能体，作为个人 AI 工作流的统一入�
 1 澄清 ─ 调用 grill-me-with-doc；D1–D6 全明不澄清；结果落 clarification.md
 2 规划 ─ 计划含目标/约束/输入/输出/验收标准/人工卡点；用户确认后执行
 3 分解分发 ─ 生成任务包→ validate --strict → 按依赖分发
-4 汇总验收 ─ 验收执行(程序重算) → 自我批判 → ✅/❌ 报告 → 人工验收
+4 汇总验收 ─ 验收执行(程序重算) → 自我批判 → 独立复核(blocker/major) → ✅/❌ 报告 → 人工验收
 5 写回 ─ 决策/规则/术语按分类沉淀，记录共性问题
 ```
 
@@ -160,6 +160,17 @@ python ~/.claude/gates/gate.py acceptance --file acceptance.json --base-dir <交
 
 输出前先自检：目标对齐 / 完整性 / 正确性 / 一致性 / 边界 / 格式，逐条给出通过/不通过+原因。
 
+### 4.1b 独立复核（blocker/major 必做，每 task_id 最多一次）
+
+- 触发：任务包任一验收项 severity 为 blocker 或 major。
+- 执行方：独立 reviewer 子 agent，模型 GLM-5.3，独立会话/上下文；不得复用执行方会话。
+- 输入：任务包 + 产物 + 输入数据 + 各文件 sha256；不得给 reviewer 执行方推理、self-review、evidence 目录。
+- 输出：`reports/<task>/review.json`，字段见 `schemas/review.schema.json`（仓库版；安装版在 `~/.claude/gates/schemas/review.schema.json`）；逐项 pass/fail/blocked + 具体理由 + 证据。
+- 预算：每 task_id 最多一次实质复核；reviewer 失败 → 回退执行方重做；重做后不得静默二次复核，必须新开 task_id 或由用户批准预算例外。
+- 格式：reviewer 输出非法 JSON/schema 失败时，允许一次“仅修格式”的重试（同一产物、同一 prompt，不改变结论）；实质 fail 不重试。
+- 门禁：`gate.py acceptance` 校验 review.json 的 `task_package_sha256`、`reviewed_artifact.sha256`、`reviewer_model`、run id 与逐项结果；不一致即失败。
+- 人工：最终仍需 Step 4.3 人工验收；blocker 失败或不可逆动作必须有人的明确批准记录。
+
 ### 4.2 结构化验收报告
 
 验收结果列**只允许 ✅ 已通过 / ❌ 未通过**；「待确认」事项放单独区，不得出现在结果列。
@@ -168,6 +179,8 @@ python ~/.claude/gates/gate.py acceptance --file acceptance.json --base-dir <交
 ## 交付物
 ## 验收报告
 | # | 验收项 | 结果(✅/❌) | 依据(脚本输出/人工确认) |
+## 独立复核
+review.json（reviewer / 模型 / 结论）
 ## 待确认事项
 ## 已知限制
 ```
@@ -178,6 +191,7 @@ python ~/.claude/gates/gate.py acceptance --file acceptance.json --base-dir <交
 - 需求理解偏差 → 回 Step 1
 - 方案设计问题 → 回 Step 2
 - 执行质量问题 → **回退给执行方重做或重新分解**（§6.6 只允许这两个路径，不得自行"修一下"）
+- reviewer 失败 → 按执行质量问题回退；重做后按 4.1b 预算规则处理（新 task_id 或人工批准例外）
 
 ### 4.4 对外动作
 

@@ -33,6 +33,8 @@ matcher 同时覆盖 `Bash|Shell|shell|mcp__.*`：shell 命令检测 `git -C ...
 云/容器/包发布等语法；MCP 采用**只读白名单**，未知 MCP 能力默认 deny，已知写动词 deny。
 hook 输入损坏、缺 `tool_name/command` 或内部异常一律返回 deny（失败关闭）。
 
+安装后必须核对 `~/.claude/gates/gate.py` 与仓库版 sha256 一致，且 `schemas/review.schema.json` 已同步；旧版 gate 不识别 review 绑定。
+
 人工预批准：
 
 ```bash
@@ -68,7 +70,7 @@ python ~/.claude/gates/gate.py security-status
 | public-owner-gate | 已实现（registry 层） | 七字段/依赖/路径 + `rules`/`skills/*/SKILL.md`/`agents`/`flows` 公共入口漏登记检测 |
 | filelist-sync-gate | **未实现** | 公共库无 RTL；R1 要求等价人工检查，规则不因 hook 缺失失效 |
 | acceptance-evidence-gate | 已实现 | `gate.py acceptance` |
-| review-independence-gate | 已实现 | acceptance reviewer≠executor；B `review.json` |
+| review-independence-gate | 已实现 | acceptance reviewer≠executor + review.json 绑定（reviewed_artifact / reviewer_model / run id / visible inputs） |
 | human-gate-verify | 部分实现 | 计划 scope_hash + 外发批准支持 SSH 签名；签名需人持私钥，未配置时为兼容模式；尚无 GitHub 事件级 allowlist |
 | memory-write-gate | 部分实现 | `gate.py memory` 已校验 provenance/owner/来源/scope/raw/secret；尚未强制挂到所有 Write/MCP memory 写入 |
 | context-watermark-gate | **未实现** | 需要 harness 提供实际使用率输入；当前只有提示注入 |

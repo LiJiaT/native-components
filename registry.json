@@ -383,6 +383,198 @@
       "status": "active",
       "path": "flows/asset-lifecycle",
       "install_target": "user-global"
+    },
+    {
+      "name": "ark-batch-resilience",
+      "type": "skill",
+      "owner": "AI 平台团队",
+      "interface": "长跑 LLM 批量任务停滞/429/僵死的诊断与看护脚本设计",
+      "dependencies": [
+        "external:volcengine-ark",
+        "external:curl"
+      ],
+      "version": "0.1.0",
+      "status": "experimental",
+      "path": "skills/ark-batch-resilience",
+      "install_target": "user-global"
+    },
+    {
+      "name": "automode-classifier-outage",
+      "type": "skill",
+      "owner": "AI 平台团队",
+      "interface": "Claude Code auto mode 分类器超时的分级应对",
+      "dependencies": [
+        "external:claude-code"
+      ],
+      "version": "0.1.0",
+      "status": "experimental",
+      "path": "skills/automode-classifier-outage",
+      "install_target": "user-global"
+    },
+    {
+      "name": "bg-cron-patrol",
+      "type": "skill",
+      "owner": "AI 平台团队",
+      "interface": "后台 session 的 cron 巡检与分离进程幂等重启",
+      "dependencies": [
+        "external:claude-code",
+        "external:python3",
+        "external:cron"
+      ],
+      "version": "0.1.0",
+      "status": "experimental",
+      "path": "skills/bg-cron-patrol",
+      "install_target": "user-global"
+    },
+    {
+      "name": "claude-sdk-headless",
+      "type": "skill",
+      "owner": "AI 平台团队",
+      "interface": "Python claude-agent-sdk 无头调用与流问题排查",
+      "dependencies": [
+        "external:python3",
+        "external:claude-agent-sdk",
+        "external:claude-code"
+      ],
+      "version": "0.1.0",
+      "status": "experimental",
+      "path": "skills/claude-sdk-headless",
+      "install_target": "user-global"
+    },
+    {
+      "name": "docker-hotpatch-upstream-fix",
+      "type": "skill",
+      "owner": "AI 平台团队",
+      "interface": "容器内热打上游未发版修复并做回滚验证",
+      "dependencies": [
+        "external:docker",
+        "external:git",
+        "external:curl"
+      ],
+      "version": "0.1.0",
+      "status": "experimental",
+      "path": "skills/docker-hotpatch-upstream-fix",
+      "install_target": "user-global"
+    },
+    {
+      "name": "llm-access",
+      "type": "skill",
+      "owner": "AI 平台团队",
+      "interface": "火山方舟 Agent Plan 端点调用 CLI（Anthropic/OpenAI 协议）",
+      "dependencies": [
+        "external:python3",
+        "external:volcengine-ark"
+      ],
+      "version": "0.1.0",
+      "status": "experimental",
+      "path": "skills/llm-access",
+      "install_target": "user-global"
+    },
+    {
+      "name": "ocr-bundle-repair",
+      "type": "skill",
+      "owner": "AI 平台团队",
+      "interface": "OCR bundle 拆包与转写损伤修复验证",
+      "dependencies": [
+        "external:node"
+      ],
+      "version": "0.1.0",
+      "status": "experimental",
+      "path": "skills/ocr-bundle-repair",
+      "install_target": "user-global"
+    },
+    {
+      "name": "transcript-replay-recovery",
+      "type": "skill",
+      "owner": "AI 平台团队",
+      "interface": "从 Claude transcript 重放 Edit/Write 恢复文件",
+      "dependencies": [
+        "external:python3",
+        "external:claude-code"
+      ],
+      "version": "0.1.0",
+      "status": "experimental",
+      "path": "skills/transcript-replay-recovery",
+      "install_target": "user-global"
+    },
+    {
+      "name": "universal-agent-creator",
+      "type": "skill",
+      "owner": "AI 平台团队",
+      "interface": "跨 IDE 创建/校验/安装子代理",
+      "dependencies": [
+        "external:python3",
+        "external:claude-code"
+      ],
+      "version": "0.1.0",
+      "status": "experimental",
+      "path": "skills/universal-agent-creator",
+      "install_target": "user-global"
+    },
+    {
+      "name": "universal-env-sync",
+      "type": "skill",
+      "owner": "AI 平台团队",
+      "interface": "Claude 主源与各 IDE 之间同步环境并报告漂移",
+      "dependencies": [
+        "external:python3",
+        "external:claude-code"
+      ],
+      "version": "0.1.0",
+      "status": "experimental",
+      "path": "skills/universal-env-sync",
+      "install_target": "user-global"
+    },
+    {
+      "name": "universal-skill-creator",
+      "type": "skill",
+      "owner": "AI 平台团队",
+      "interface": "跨 IDE 创建/同步 Agent Skill",
+      "dependencies": [
+        "external:python3",
+        "external:claude-code"
+      ],
+      "version": "0.1.0",
+      "status": "experimental",
+      "path": "skills/universal-skill-creator",
+      "install_target": "user-global"
+    },
+    {
+      "name": "editing-fenced-docs",
+      "type": "rule",
+      "owner": "AI 平台团队",
+      "interface": "编辑含大段围栏模板的文档时拆段并校验闭合",
+      "dependencies": [
+        "external:claude-code"
+      ],
+      "version": "0.1.0",
+      "status": "experimental",
+      "path": "rules/editing-fenced-docs.md",
+      "install_target": "user-global"
+    },
+    {
+      "name": "external-ai-plans",
+      "type": "rule",
+      "owner": "AI 平台团队",
+      "interface": "外部 LLM 方案先核实事实再执行",
+      "dependencies": [
+        "external:claude-code"
+      ],
+      "version": "0.1.0",
+      "status": "experimental",
+      "path": "rules/external-ai-plans.md",
+      "install_target": "user-global"
+    },
+    {
+      "name": "system-prompt-starter",
+      "type": "prompt",
+      "owner": "AI 平台团队",
+      "interface": "可移植全局系统提示词起点（占位符替换）",
+      "dependencies": [],
+      "version": "0.1.0",
+      "status": "experimental",
+      "path": "prompts/system-prompt-starter.md",
+      "install_target": "user-global"
     }
   ]
 }

@@ -99,6 +99,8 @@ def target_paths(comp, claude_home, project_slug):
             return [(src, base / "tools" / src.name)]
         if typ == "schema":
             return [(p, base / "schemas" / p.name) for p in src.glob("*") if p.is_file()]
+        if typ == "prompt":
+            return [(src, base / "prompts" / src.name)]
         if typ == "doc":
             return [(src, base / "docs" / src.name)]
         return []
@@ -136,6 +138,8 @@ def target_paths(comp, claude_home, project_slug):
     if typ == "schema":
         base = h / "schemas"
         return [(p, base / p.name) for p in src.glob("*") if p.is_file()]
+    if typ == "prompt":
+        return [(src, h / "prompts" / src.name)]
     if typ == "doc":
         return [(src, h / "docs" / src.name)]
     return []

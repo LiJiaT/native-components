@@ -12,15 +12,15 @@ AI Native 工程流程的可复用基础组件库。组件按类型分目录存�
 
 | 目录 | 放什么 | 当前内容 |
 |---|---|---|
-| [`skills/`](skills/README.md) | Agent Skill（Claude Code 等） | `assetize`、`asset-ai-ize`、`ai-infra-feedback`、`engineering-agent`、`grill-me-with-doc`、`session-distiller` |
+| [`skills/`](skills/README.md) | Agent Skill（Claude Code 等） | `assetize`、`asset-ai-ize`、`ai-infra-feedback`、`engineering-agent`、`grill-me-with-doc`、`session-distiller`；另 11 个会话蒸馏技能（0.1.0，experimental，见 registry） |
 | [`flows/`](flows/README.md) | 多组件编排的端到端流程 | [`self-evolution`](flows/self-evolution/README.md) |
 | [`memory/`](memory/README.md) | 可复用的 memory 条目模板与公共记忆 | `asset-taxonomy.md`；领域目录仅放真实资产 |
-| [`rules/`](rules/README.md) | 可复用的工程规则（Rule） | 5 条公共规则（R1/R3/R4/R7/R8） |
+| [`rules/`](rules/README.md) | 可复用的工程规则（Rule） | 7 条公共规则（R1/R3/R4/R7/R8 + `editing-fenced-docs`、`external-ai-plans`） |
 | [`gates/`](gates/README.md) | 失败关闭的确定性门禁与 PreToolUse 拦截 | `gate.py`、`settings.example.json` |
 | [`schemas/`](schemas/) | approved record / registry / plan / acceptance / install 契约 | 5 个 JSON Schema |
 | [`tools/`](tools/install.py) | 安装、备份、回滚 | `install.py` |
 | [`samples/`](samples/README.md) | 仅用于流程验证的 synthetic 样例 | `synthetic/dft/*`（test-only，不安装） |
-| [`prompts/`](prompts/README.md) | 可复用的提示词模板（Prompt） | 待补充 |
+| [`prompts/`](prompts/README.md) | 可复用的提示词模板（Prompt） | `system-prompt-starter`（0.1.0，experimental） |
 | [`hooks/`](hooks/README.md) | 确定性钩子脚本与配置示例（Hook） | `engineering-agent`、`self-evolve` |
 | [`agents/`](agents/README.md) | 子代理定义（Agent） | `engineering-agent` |
 | [`env/`](env/README.md) | 本机 AI 开发环境快照（原 `claude-code-env`） | `agents`/`rules`/`skills`/`hooks`/`scenarios` |

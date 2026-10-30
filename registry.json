@@ -88,6 +88,51 @@
       "install_target": "user-global"
     },
     {
+      "name": "create-skill",
+      "type": "skill",
+      "owner": "AI 平台团队",
+      "interface": "流程 → 技能包：澄清触发条件/边界 → 按共用模板生成 skills 目录下的技能骨架 → 静态校验（scripts/validate_component.py --type skill <dir>）→ Claude Code 沙箱真实触发一次；共用模板与实测协议的唯一来源都在本技能 references/ 下",
+      "dependencies": [
+        "external:python3",
+        "external:pyyaml",
+        "external:claude-code"
+      ],
+      "version": "1.0.0",
+      "status": "active",
+      "path": "skills/create-skill",
+      "install_target": "user-global"
+    },
+    {
+      "name": "create-hook",
+      "type": "skill",
+      "owner": "AI 平台团队",
+      "interface": "事件 → hook 组：脚本读 stdin 事件 JSON、fail-open 旁路 → 生成脚本/settings.example.json/win 包装器/tests/README 五要素 → 静态校验（validate_component.py --type hook <dir>）→ 沙箱真实触发；只给示例配置，不改用户 settings.json",
+      "dependencies": [
+        "create-skill",
+        "external:python3",
+        "external:claude-code"
+      ],
+      "version": "1.0.0",
+      "status": "active",
+      "path": "skills/create-hook",
+      "install_target": "user-global"
+    },
+    {
+      "name": "create-agent",
+      "type": "skill",
+      "owner": "AI 平台团队",
+      "interface": "委派角色 → 子代理定义：澄清职责/边界/何时不用 → 生成 agents/<name>.md（不写 model）→ 静态校验（validate_component.py --type agent <file>）→ 沙箱真实派发；不做跨平台格式转换",
+      "dependencies": [
+        "create-skill",
+        "external:python3",
+        "external:claude-code"
+      ],
+      "version": "1.0.0",
+      "status": "active",
+      "path": "skills/create-agent",
+      "install_target": "user-global"
+    },
+    {
       "name": "engineering-agent",
       "type": "agent",
       "owner": "AI 平台团队",
